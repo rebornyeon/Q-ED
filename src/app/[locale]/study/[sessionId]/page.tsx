@@ -17,7 +17,8 @@ import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import {
   ChevronLeft, ChevronRight, Trophy, AlertTriangle,
-  Loader2, List, BookPlus, CopyPlus, CheckSquare, Square, Check
+  Loader2, List, BookPlus, CopyPlus, CheckSquare, Square, Check,
+  MessageCircleQuestion, Send, ChevronDown, ChevronUp, Sparkles
 } from "lucide-react";
 import {
   Sheet, SheetTrigger, SheetContent, SheetHeader, SheetTitle,
@@ -92,6 +93,12 @@ export default function StudySessionPage({
   });
   const [showSuggestSimilar, setShowSuggestSimilar] = useState(false);
   const [startingWeakSession, setStartingWeakSession] = useState(false);
+  const [askQuestion, setAskQuestion] = useState("");
+  const [askAnswer, setAskAnswer] = useState<string | null>(null);
+  const [askLoading, setAskLoading] = useState(false);
+  const [askHistory, setAskHistory] = useState<{ q: string; a: string }[]>([]);
+  const [askExpanded, setAskExpanded] = useState<Set<number>>(new Set());
+  const askInputRef = useRef<HTMLTextAreaElement>(null);
 
   const currentProblem: Problem | undefined = problems[currentProblemIndex];
 
@@ -156,6 +163,10 @@ export default function StudySessionPage({
   useEffect(() => {
     setSimilarAdded(null);
     setShowSuggestSimilar(false);
+    setAskQuestion("");
+    setAskAnswer(null);
+    setAskHistory([]);
+    setAskExpanded(new Set());
   }, [currentProblemIndex]);
 
   // Load cues when problem changes
@@ -292,6 +303,33 @@ export default function StudySessionPage({
     }
   }
 
+  async function handleAsk() {
+    if (!currentProblem || !askQuestion.trim() || askLoading) return;
+    const q = askQuestion.trim();
+    setAskLoading(true);
+    setAskAnswer(null);
+    try {
+      const res = await fetch("/api/ask-question", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ problemId: currentProblem.id, question: q, history: askHistory }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAskAnswer(data.answer);
+        setAskHistory((prev) => {
+          const newIdx = prev.length;
+          setAskExpanded((exp) => new Set([...exp, newIdx]));
+          return [...prev, { q, a: data.answer }];
+        });
+        setAskQuestion("");
+        if (askInputRef.current) askInputRef.current.style.height = "36px";
+      }
+    } finally {
+      setAskLoading(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -401,6 +439,7 @@ export default function StudySessionPage({
   const progressPercent = ((currentProblemIndex + 1) / problems.length) * 100;
   const currentLastRating = ratingHistory.get(currentProblem.id)?.at(-1);
   const currentNeedsRetry = (currentLastRating === "again" || currentLastRating === "hard") && !generatedIds.has(currentProblem.id);
+  const isMastered = currentLastRating === "easy" && revealedLevel === 0;
 
   // Build question list groups (outside JSX to avoid IIFE parser issues)
   const sectionOrder: string[] = [];
@@ -414,437 +453,490 @@ export default function StudySessionPage({
   const hasRealSections = questionGroups.some((g) => g.section !== "General") || questionGroups.length > 1;
 
   return (
-    <div className="min-h-screen bg-background">
-      <Navbar />
-
-      <main className="max-w-6xl mx-auto px-4 py-6">
-        {/* Header bar */}
-        <div className="flex items-center justify-between mb-6">
+    <div className="min-h-screen bg-background pb-24">
+      {/* Slim top nav — progress + secondary actions */}
+      <div className="sticky top-0 z-30 bg-background/95 backdrop-blur border-b border-border/40">
+        <div className="max-w-6xl mx-auto px-4 flex items-center justify-between h-12">
           <div className="flex items-center gap-3">
-            <span className="text-sm text-muted-foreground font-medium">
-              {t("problem")} {currentProblemIndex + 1} / {problems.length}
+            <span className="text-sm font-bold tabular-nums text-foreground">
+              {currentProblemIndex + 1}<span className="text-muted-foreground font-normal">/{problems.length}</span>
             </span>
-            <Progress value={progressPercent} className="w-32 h-1.5" />
-            {currentProblem.difficulty && (
-              <Badge variant="outline" className="text-xs">
-                {"★".repeat(currentProblem.difficulty)}
-              </Badge>
-            )}
+            {/* Progress mini-map: colored dots for each problem */}
+            <div className="relative group">
+              <Progress value={progressPercent} className="w-24 h-1.5 cursor-pointer" />
+              <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 hidden group-hover:flex flex-wrap gap-[3px] p-2 rounded-lg bg-popover border border-border shadow-lg z-50 max-w-[280px]">
+                {problems.map((p, i) => {
+                  const lr = ratingHistory.get(p.id)?.at(-1);
+                  const dotColor = lr === "easy" ? "bg-green-500" : lr === "good" ? "bg-blue-500" : lr === "hard" ? "bg-orange-500" : lr === "again" ? "bg-red-500" : i === currentProblemIndex ? "bg-primary ring-1 ring-primary/50" : "bg-muted-foreground/20";
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => jumpToIndex(i)}
+                      className={`h-2.5 w-2.5 rounded-full ${dotColor} hover:scale-150 transition-transform cursor-pointer`}
+                      title={`Q${i + 1}${lr ? ` — ${lr}` : ""}`}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+            <StudyTimer isRunning={!rating} onTick={setTimerSeconds} />
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <Sheet open={listOpen} onOpenChange={setListOpen}>
               <SheetTrigger
-                render={
-                  <Button variant="outline" size="sm" className="gap-1.5 text-xs" />
-                }
+                render={<Button variant="ghost" size="sm" className="gap-1.5 text-xs h-8" />}
               >
                 <List className="h-3.5 w-3.5" />
-                Question List
+                <span className="hidden sm:inline">Questions</span>
               </SheetTrigger>
               <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto p-0">
                 <SheetHeader className="p-4 border-b border-border sticky top-0 bg-background z-10">
                   <SheetTitle>Question List ({problems.length})</SheetTitle>
                 </SheetHeader>
                 <div>
-                      {questionGroups.map((group, gi) => (
-                        <div key={group.section}>
-                          {/* Section header — hide if only one "General" group */}
-                          {/* Sticky section header */}
-                          {hasRealSections && (
-                            <div className="px-4 py-2.5 bg-background border-y border-border/60 sticky top-0 z-10 shadow-sm">
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs font-bold text-primary/70 tabular-nums shrink-0">
-                                  §{gi + 1}
-                                </span>
-                                <p className="text-xs font-semibold text-foreground leading-snug">
-                                  {group.section}
-                                </p>
-                                <span className="ml-auto text-xs text-muted-foreground shrink-0 pl-2">
-                                  {group.items.length}q
-                                </span>
-                              </div>
-                            </div>
-                          )}
-                          <div className="divide-y divide-border/30">
-                            {group.items.map(({ problem: p, index: i }) => {
-                              const lastRating = ratingHistory.get(p.id)?.at(-1);
-                              const needsRetry = lastRating === "again" || lastRating === "hard";
-                              const checkboxColor = !triedIds.has(p.id)
-                                ? "text-muted-foreground/30 hover:text-muted-foreground hover:bg-muted/50"
-                                : lastRating === "again" ? "text-red-600 bg-red-500/10"
-                                : lastRating === "hard"  ? "text-orange-600 bg-orange-500/10"
-                                : lastRating === "good"  ? "text-blue-600 bg-blue-500/10"
-                                : lastRating === "easy"  ? "text-green-600 bg-green-500/10"
-                                : "text-green-600 bg-green-500/10";
-
-                              return (
-                              <div
-                                key={p.id}
-                                className={`flex items-stretch border-l-2 transition-colors ${
-                                  i === currentProblemIndex ? "bg-primary/5 border-l-primary" :
-                                  generatedIds.has(p.id) ? "bg-sky-500/5 border-l-sky-400" :
-                                  needsRetry ? "bg-amber-500/5 border-l-amber-400" :
-                                  "border-l-transparent"
-                                }`}
-                              >
-                                {/* Clickable main area */}
-                                <button
-                                  onClick={() => { jumpToIndex(i); setListOpen(false); }}
-                                  className="flex-1 text-left px-4 py-3 hover:bg-muted/40 transition-colors min-w-0"
-                                >
-                                  {/* Row 1: Q number + exam likelihood + tags */}
-                                  <div className="flex items-center gap-2 flex-wrap mb-1.5">
-                                    <span className={`text-xs font-bold tabular-nums shrink-0 ${
-                                      i === currentProblemIndex ? "text-primary" : "text-muted-foreground"
-                                    }`}>
-                                      Q{i + 1}
-                                    </span>
-                                    {p.exam_likelihood != null && (
-                                      <span
-                                        title={`Exam likelihood: ${p.exam_likelihood}/5`}
-                                        className={`text-[10px] font-bold ${
-                                          p.exam_likelihood >= 5 ? "text-red-500" :
-                                          p.exam_likelihood >= 4 ? "text-orange-500" :
-                                          p.exam_likelihood >= 3 ? "text-yellow-500" :
-                                          "text-muted-foreground/40"
-                                        }`}
-                                      >
-                                        {"●".repeat(Math.max(1, p.exam_likelihood))}
-                                      </span>
-                                    )}
-                                    {p.difficulty && (
-                                      <span className="text-xs text-amber-500">{"★".repeat(p.difficulty)}</span>
-                                    )}
-                                    {generatedIds.has(p.id) && (
-                                      <span className="text-xs font-semibold text-sky-600 bg-sky-500/15 px-1.5 py-0.5 rounded-full">✦ AI Generated</span>
-                                    )}
-                                    {needsRetry && !generatedIds.has(p.id) && (
-                                      <span className="text-xs font-semibold text-amber-600 bg-amber-500/15 px-1.5 py-0.5 rounded-full">⟳ Retry</span>
-                                    )}
-                                    {p.is_exam_overlap && (
-                                      <span className="text-xs font-semibold text-red-600 bg-red-500/15 px-1.5 py-0.5 rounded-full">Past Exam</span>
-                                    )}
-                                  </div>
-
-                                  {/* Concepts */}
-                                  {p.concepts.length > 0 && (
-                                    <div className="flex flex-wrap gap-1.5">
-                                      {p.concepts.slice(0, 3).map((c, ci) => (
-                                        <span key={ci} className="text-xs bg-muted px-1.5 py-0.5 rounded text-muted-foreground">{c}</span>
-                                      ))}
-                                    </div>
-                                  )}
-                                </button>
-
-                                {/* Tried toggle — separate column, not nested in button */}
-                                <div
-                                  role="button"
-                                  tabIndex={0}
-                                  onClick={() => toggleTried(p.id)}
-                                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") toggleTried(p.id); }}
-                                  title={triedIds.has(p.id) ? "Mark as not tried" : "Mark as tried"}
-                                  className={`shrink-0 flex flex-col items-center justify-center gap-1 w-12 cursor-pointer transition-colors border-l border-border/30 ${checkboxColor}`}
-                                >
-                                  {triedIds.has(p.id)
-                                    ? <CheckSquare className="h-4 w-4" />
-                                    : <Square className="h-4 w-4" />
-                                  }
-                                  {(ratingHistory.get(p.id)?.length ?? 0) > 0 && (
-                                    <div className="flex flex-col items-center gap-px">
-                                      {(ratingHistory.get(p.id) ?? []).slice(0, 3).map((r, j) => (
-                                        <Check key={j} className={`h-2.5 w-2.5 ${
-                                          r === "again" ? "text-red-500" :
-                                          r === "hard"  ? "text-orange-500" :
-                                          r === "good"  ? "text-blue-500" :
-                                                          "text-green-500"
-                                        }`} />
-                                      ))}
-                                      {(ratingHistory.get(p.id)?.length ?? 0) > 3 && (
-                                        <span className="text-[9px] text-muted-foreground">+{(ratingHistory.get(p.id)?.length ?? 0) - 3}</span>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                              );
-                            })}
+                  {questionGroups.map((group, gi) => (
+                    <div key={group.section}>
+                      {hasRealSections && (
+                        <div className="px-4 py-2.5 bg-background border-y border-border/60 sticky top-0 z-10 shadow-sm">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-primary/70 tabular-nums shrink-0">§{gi + 1}</span>
+                            <p className="text-xs font-semibold text-foreground leading-snug">{group.section}</p>
+                            <span className="ml-auto text-xs text-muted-foreground shrink-0 pl-2">{group.items.length}q</span>
                           </div>
                         </div>
-                      ))}
+                      )}
+                      <div className="divide-y divide-border/30">
+                        {group.items.map(({ problem: p, index: i }) => {
+                          const lastRating = ratingHistory.get(p.id)?.at(-1);
+                          const needsRetry = lastRating === "again" || lastRating === "hard";
+                          const checkboxColor = !triedIds.has(p.id)
+                            ? "text-muted-foreground/30 hover:text-muted-foreground hover:bg-muted/50"
+                            : lastRating === "again" ? "text-red-600 bg-red-500/10"
+                            : lastRating === "hard"  ? "text-orange-600 bg-orange-500/10"
+                            : lastRating === "good"  ? "text-blue-600 bg-blue-500/10"
+                            : "text-green-600 bg-green-500/10";
+                          return (
+                            <div
+                              key={p.id}
+                              className={`flex items-stretch border-l-2 transition-colors ${
+                                i === currentProblemIndex ? "bg-primary/5 border-l-primary" :
+                                generatedIds.has(p.id) ? "bg-sky-500/5 border-l-sky-400" :
+                                needsRetry ? "bg-amber-500/5 border-l-amber-400" : "border-l-transparent"
+                              }`}
+                            >
+                              <button
+                                onClick={() => { jumpToIndex(i); setListOpen(false); }}
+                                className="flex-1 text-left px-4 py-3 hover:bg-muted/40 transition-colors min-w-0"
+                              >
+                                <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                                  <span className={`text-xs font-bold tabular-nums shrink-0 ${i === currentProblemIndex ? "text-primary" : "text-muted-foreground"}`}>Q{i + 1}</span>
+                                  {p.difficulty && <span className="text-xs text-amber-500">{"★".repeat(p.difficulty)}</span>}
+                                  {generatedIds.has(p.id) && <span className="text-xs font-semibold text-sky-600 bg-sky-500/15 px-1.5 py-0.5 rounded-full">✦ AI</span>}
+                                  {needsRetry && !generatedIds.has(p.id) && <span className="text-xs font-semibold text-amber-600 bg-amber-500/15 px-1.5 py-0.5 rounded-full">⟳</span>}
+                                  {p.is_exam_overlap && <span className="text-xs font-semibold text-red-600 bg-red-500/15 px-1.5 py-0.5 rounded-full">Exam</span>}
+                                </div>
+                                {p.concepts.length > 0 && (
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {p.concepts.slice(0, 3).map((c, ci) => (
+                                      <span key={ci} className="text-xs bg-muted px-1.5 py-0.5 rounded text-muted-foreground">{c}</span>
+                                    ))}
+                                  </div>
+                                )}
+                              </button>
+                              <div
+                                role="button" tabIndex={0}
+                                onClick={() => toggleTried(p.id)}
+                                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") toggleTried(p.id); }}
+                                className={`shrink-0 flex flex-col items-center justify-center gap-1 w-12 cursor-pointer transition-colors border-l border-border/30 ${checkboxColor}`}
+                              >
+                                {triedIds.has(p.id) ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+                                {(ratingHistory.get(p.id)?.length ?? 0) > 0 && (
+                                  <div className="flex flex-col items-center gap-px">
+                                    {(ratingHistory.get(p.id) ?? []).slice(0, 3).map((r, j) => (
+                                      <Check key={j} className={`h-2.5 w-2.5 ${r === "again" ? "text-red-500" : r === "hard" ? "text-orange-500" : r === "good" ? "text-blue-500" : "text-green-500"}`} />
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
+                  ))}
+                </div>
               </SheetContent>
             </Sheet>
             {documentId && (
               <Sheet open={suppOpen} onOpenChange={setSuppOpen}>
-                <SheetTrigger
-                  render={<Button variant="outline" size="sm" className="gap-1.5 text-xs" />}
-                >
+                <SheetTrigger render={<Button variant="ghost" size="sm" className="gap-1.5 text-xs h-8" />}>
                   <BookPlus className="h-3.5 w-3.5" />
-                  Materials
+                  <span className="hidden sm:inline">Materials</span>
                 </SheetTrigger>
                 <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto p-0">
                   <SheetHeader className="p-4 border-b border-border">
                     <SheetTitle>Supplementary Materials</SheetTitle>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Add past exams, professor notes, or study guides. New Cues will reflect them.
-                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">Add past exams, professor notes, or study guides.</p>
                   </SheetHeader>
-                  <div className="p-4">
-                    <SupplementaryUpload documentId={documentId} />
-                  </div>
+                  <div className="p-4"><SupplementaryUpload documentId={documentId} /></div>
                 </SheetContent>
               </Sheet>
             )}
-            <StudyTimer
-              isRunning={!rating}
-              onTick={setTimerSeconds}
-            />
+            <Button variant="ghost" size="sm" className="gap-1.5 text-xs h-8" onClick={() => router.push(`/${locale}/study`)}>
+              <ChevronLeft className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Study Sessions</span>
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Main content — two-column: problem left, AI tutor pinned right */}
+      <main className="max-w-6xl mx-auto px-4 pt-8 lg:flex lg:gap-6">
+        {/* LEFT COLUMN — problem, hints, post-mortem */}
+        <div className="flex-1 min-w-0">
+        {/* Problem title row — with tried checkmark inline */}
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-lg font-bold text-foreground">
+              {t("problem")} {currentProblemIndex + 1}
+            </h1>
+            {currentProblem.difficulty && (
+              <span className="text-sm text-amber-500">{"★".repeat(currentProblem.difficulty)}</span>
+            )}
+            {isMastered && (
+              <Badge variant="outline" className="text-[11px] border-0 bg-green-500/10 text-green-600 font-semibold">Mastered</Badge>
+            )}
+            {generatedIds.has(currentProblem.id) && (
+              <Badge variant="outline" className="text-[11px] border-0 bg-sky-500/10 text-sky-600 font-semibold">✦ AI Generated</Badge>
+            )}
+            {currentNeedsRetry && (
+              <Badge variant="outline" className="text-[11px] border-0 bg-amber-500/10 text-amber-600 font-semibold">⟳ Retry</Badge>
+            )}
+            {currentProblem.exam_likelihood != null && currentProblem.exam_likelihood >= 4 && (
+              <Badge variant="outline" className={`text-[11px] border-0 font-semibold ${currentProblem.exam_likelihood >= 5 ? "bg-red-500/10 text-red-600" : "bg-orange-500/10 text-orange-600"}`}>
+                Exam Focus
+              </Badge>
+            )}
+            {currentProblem.is_exam_overlap && (
+              <Badge variant="outline" className="text-[11px] border-0 bg-purple-500/10 text-purple-600 font-semibold">Past Exam</Badge>
+            )}
+          </div>
+          {/* Tried + rating history — top right */}
+          <div className="flex items-center gap-2 shrink-0">
+            {(ratingHistory.get(currentProblem.id)?.length ?? 0) > 0 && (
+              <span className="flex items-center gap-0.5">
+                {(ratingHistory.get(currentProblem.id) ?? []).map((r, j) => (
+                  <Check key={j} className={`h-3 w-3 ${r === "again" ? "text-red-500" : r === "hard" ? "text-orange-500" : r === "good" ? "text-blue-500" : "text-green-500"}`} />
+                ))}
+              </span>
+            )}
+            <button
+              onClick={() => toggleTried(currentProblem.id)}
+              className={`flex items-center gap-1 text-xs font-medium transition-colors ${triedIds.has(currentProblem.id) ? "text-green-600" : "text-muted-foreground/40 hover:text-muted-foreground"}`}
+              title={triedIds.has(currentProblem.id) ? "Tried" : "Mark as tried"}
+            >
+              {triedIds.has(currentProblem.id) ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+            </button>
           </div>
         </div>
 
-        {/* Main split layout */}
-        <div className="grid lg:grid-cols-2 gap-6">
-          {/* Left: Problem */}
-          <div className="space-y-4">
-            <Card className="min-h-64">
-              <CardHeader className="pb-2">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <CardTitle className="text-base">{t("problem")} {currentProblemIndex + 1}</CardTitle>
-                    {generatedIds.has(currentProblem.id) && (
-                      <Badge variant="outline" className="text-xs font-bold border-0 bg-sky-500/10 text-sky-600">
-                        ✦ AI Generated
-                      </Badge>
-                    )}
-                    {currentNeedsRetry && (
-                      <Badge variant="outline" className="text-xs font-bold border-0 bg-amber-500/10 text-amber-600">
-                        ⟳ Retry
-                      </Badge>
-                    )}
-                    {currentProblem.exam_likelihood != null && currentProblem.exam_likelihood >= 4 && (
-                      <Badge
-                        variant="outline"
-                        className={`text-xs font-bold border-0 ${
-                          currentProblem.exam_likelihood >= 5
-                            ? "bg-red-500/10 text-red-600"
-                            : "bg-orange-500/10 text-orange-600"
-                        }`}
-                      >
-                        🎯 Exam Focus
-                      </Badge>
-                    )}
-                    {currentProblem.is_exam_overlap && (
-                      <Badge variant="outline" className="text-xs font-bold border-0 bg-purple-500/10 text-purple-600">
-                        📋 Past Exam
-                      </Badge>
-                    )}
-                  </div>
-                  {currentProblem.concepts.length > 0 && (
-                    <div className="flex gap-1 flex-wrap justify-end">
-                      {currentProblem.concepts.slice(0, 3).map((c, i) => (
-                        <Badge key={i} variant="secondary" className="text-xs">{c}</Badge>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent>
-                <MathContent className="text-base leading-relaxed">
-                  {currentProblem.content}
-                </MathContent>
+        {/* Concept tags — subtle, below title */}
+        {currentProblem.concepts.length > 0 && (
+          <div className="flex gap-1.5 flex-wrap mb-4">
+            {currentProblem.concepts.map((c, i) => (
+              <Badge key={i} variant="secondary" className="text-xs font-normal">{c}</Badge>
+            ))}
+          </div>
+        )}
 
-                {/* Source location */}
-                {(documentTitle || currentProblem.section || currentProblem.page || currentProblem.problem_number) && (
-                  <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground/60">
-                    {documentTitle && <span className="font-medium">{documentTitle}</span>}
-                    {currentProblem.section && <><span>·</span><span>{currentProblem.section}</span></>}
-                    {currentProblem.page && <><span>·</span><span>p.{currentProblem.page}</span></>}
-                    {currentProblem.problem_number && <><span>·</span><span>#{currentProblem.problem_number}</span></>}
-                  </div>
-                )}
+        {/* Hero question block — prominent card */}
+        <div className="rounded-xl bg-card border border-border/60 shadow-md px-8 py-10 mb-3">
+          <MathContent className="text-2xl leading-loose font-serif">
+            {currentProblem.content}
+          </MathContent>
+        </div>
 
-                {/* Tried checkbox */}
-                <div className="mt-4 pt-3 border-t border-border/40 flex items-center gap-3">
-                  <button
-                    onClick={() => toggleTried(currentProblem.id)}
-                    className={`flex items-center gap-1.5 text-xs font-medium transition-colors ${
-                      triedIds.has(currentProblem.id)
-                        ? "text-green-600"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {triedIds.has(currentProblem.id)
-                      ? <CheckSquare className="h-3.5 w-3.5" />
-                      : <Square className="h-3.5 w-3.5" />
-                    }
-                    {triedIds.has(currentProblem.id) ? "Tried" : "Mark as tried"}
-                  </button>
-                  {(ratingHistory.get(currentProblem.id)?.length ?? 0) > 0 && (
-                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                      {(ratingHistory.get(currentProblem.id) ?? []).map((r, j) => (
-                        <Check key={j} className={`h-3 w-3 ${
-                          r === "again" ? "text-red-500" :
-                          r === "hard"  ? "text-orange-500" :
-                          r === "good"  ? "text-blue-500" :
-                                          "text-green-500"
-                        }`} />
-                      ))}
-                    </span>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+        {/* Source + actions row below question */}
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground/50">
+            {documentTitle && <span className="font-medium">{documentTitle}</span>}
+            {currentProblem.section && <><span>·</span><span>{currentProblem.section}</span></>}
+            {currentProblem.page && <><span>·</span><span>p.{currentProblem.page}</span></>}
+            {currentProblem.problem_number && <><span>·</span><span>#{currentProblem.problem_number}</span></>}
+          </div>
+          <button
+            onClick={handleGenerateSimilar}
+            disabled={generatingSimilar}
+            className={`flex items-center gap-1.5 text-xs font-medium transition-all rounded-md px-2.5 py-1.5 ${
+              rating && !RATING[rating].isCorrect
+                ? "text-sky-600 bg-sky-500/10 hover:bg-sky-500/20 animate-pulse"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+            } disabled:opacity-50`}
+          >
+            {generatingSimilar ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+            {generatingSimilar ? "Generating..." : "Generate Similar Questions"}
+            {similarAdded !== null && <span className="text-green-600 ml-1">+{similarAdded}</span>}
+          </button>
+        </div>
 
-            {/* Difficulty rating */}
-            <div className="space-y-3">
-              {!rating ? (
-                <>
-                  <p className="text-xs text-muted-foreground text-center font-medium uppercase tracking-wide">
-                    How did it go?
-                  </p>
-                  <div className="grid grid-cols-4 gap-2">
-                    {(["again", "hard", "good", "easy"] as const).map((r) => (
-                      <Button
-                        key={r}
-                        variant="outline"
-                        size="sm"
-                        className={`flex flex-col h-auto py-2 gap-0.5 ${RATING[r].className}`}
-                        onClick={() => handleRate(r)}
-                      >
-                        <span className="font-bold text-sm">{RATING[r].label}</span>
-                        <span className="text-[10px] opacity-70 font-normal">{RATING[r].desc}</span>
-                      </Button>
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <>
-                  {/* Rating result */}
-                  <div className={`flex items-center justify-between p-3 rounded-lg text-sm font-medium border ${
-                    rating === "again" ? "bg-red-500/10 text-red-600 border-red-500/20" :
-                    rating === "hard"  ? "bg-orange-500/10 text-orange-600 border-orange-500/20" :
-                    rating === "good"  ? "bg-blue-500/10 text-blue-600 border-blue-500/20" :
-                                         "bg-green-500/10 text-green-600 border-green-500/20"
-                  }`}>
-                    <span>{RATING[rating].label} — {RATING[rating].desc}</span>
-                    {!RATING[rating].isCorrect && (
-                      <span className="text-xs opacity-70">Review again</span>
-                    )}
-                  </div>
-                  {/* Feedback (only for Again/Hard) */}
-                  {feedback && (
-                    <div className="p-3 rounded-lg bg-muted/60 border border-border/40 text-sm space-y-1">
-                      <div className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground uppercase tracking-wide">
-                        <AlertTriangle className="h-3 w-3" />
-                        {t("feedback")}
-                      </div>
-                      <p className="text-foreground leading-relaxed">{feedback}</p>
-                    </div>
-                  )}
-                  {/* Auto-suggest similar after 2× Again */}
-                  {showSuggestSimilar && similarAdded === null && (
-                    <div className="p-3 rounded-lg bg-sky-500/10 border border-sky-500/20 space-y-2">
-                      <p className="text-xs text-sky-700 font-medium">
-                        You&apos;ve struggled with this twice — practice more like it?
-                      </p>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="gap-1.5 text-xs"
-                        onClick={handleGenerateSimilar}
-                        disabled={generatingSimilar}
-                      >
-                        {generatingSimilar
-                          ? <Loader2 className="h-3 w-3 animate-spin" />
-                          : <CopyPlus className="h-3 w-3" />
-                        }
-                        {generatingSimilar ? "Generating..." : "Generate Similar Questions"}
-                      </Button>
-                    </div>
-                  )}
-                  {similarAdded !== null && (
-                    <p className="text-xs text-green-600 font-medium">+{similarAdded} questions added to session</p>
-                  )}
-                </>
-              )}
-
-              {/* Always-visible Prev / Next navigation */}
-              <div className="flex gap-2 pt-1">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={prevProblem}
-                  disabled={currentProblemIndex === 0}
-                  className="gap-1"
+        {/* Hint Stack — tighter gap from question */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">Hints</h2>
+            <div className="flex items-center gap-3">
+              {loadingCues && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+              {!loadingCues && currentProblem && (
+                <button
+                  onClick={async () => {
+                    const { createClient } = await import("@/lib/supabase/client");
+                    const sb = createClient();
+                    await sb.from("cues").delete().eq("problem_id", currentProblem.id);
+                    await loadCues(currentProblem);
+                  }}
+                  className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
                 >
-                  <ChevronLeft className="h-4 w-4" />
-                  Prev
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1 gap-1 justify-center"
-                  onClick={handleNext}
-                >
-                  {currentProblemIndex === problems.length - 1 ? "Finish" : "Next"}
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
-
-              {/* Generate Similar (manual, always available) */}
-              {!showSuggestSimilar && (
-                <div className="flex items-center gap-3">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleGenerateSimilar}
-                    disabled={generatingSimilar}
-                    className="gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-                  >
-                    {generatingSimilar
-                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      : <CopyPlus className="h-3.5 w-3.5" />
-                    }
-                    {generatingSimilar ? "Generating..." : "Generate Similar Questions"}
-                  </Button>
-                  {similarAdded !== null && (
-                    <span className="text-xs text-green-600 font-medium">+{similarAdded} added</span>
-                  )}
-                </div>
+                  Regenerate
+                </button>
               )}
             </div>
           </div>
+          {!loadingCues && <CueReveal cues={cues} />}
+        </div>
 
-          {/* Right: Cue panel */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">
-                Cue Panel
-              </h2>
-              <div className="flex items-center gap-2">
-                {loadingCues && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-                {!loadingCues && currentProblem && (
-                  <button
-                    onClick={async () => {
-                      // Delete cached cues so they regenerate in English
-                      const { createClient } = await import("@/lib/supabase/client");
-                      const sb = createClient();
-                      await sb.from("cues").delete().eq("problem_id", currentProblem.id);
-                      await loadCues(currentProblem);
-                    }}
-                    className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
-                    title="Delete cached cues and regenerate"
-                  >
-                    Regenerate
-                  </button>
+        <Separator className="mb-10" />
+
+        {/* Post-mortem — feedback + similar suggestion (only for Again/Hard) */}
+        {rating && !RATING[rating].isCorrect && (feedback || showSuggestSimilar) && (
+          <div className={`rounded-lg border p-4 space-y-3 mb-8 ${
+            rating === "again" ? "border-red-500/20 bg-red-500/5" : "border-orange-500/20 bg-orange-500/5"
+          }`}>
+            <div className="flex items-center gap-2">
+              <AlertTriangle className={`h-4 w-4 shrink-0 ${rating === "again" ? "text-red-500" : "text-orange-500"}`} />
+              <h3 className={`text-sm font-bold ${rating === "again" ? "text-red-600" : "text-orange-600"}`}>
+                Post-Mortem
+              </h3>
+            </div>
+            {feedback && (
+              <MathContent className="text-sm leading-relaxed text-foreground">
+                {feedback}
+              </MathContent>
+            )}
+            {showSuggestSimilar && similarAdded === null && (
+              <div className="pt-2 border-t border-border/30">
+                <p className="text-xs text-muted-foreground mb-2">Struggled twice — want more practice?</p>
+                <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={handleGenerateSimilar} disabled={generatingSimilar}>
+                  {generatingSimilar ? <Loader2 className="h-3 w-3 animate-spin" /> : <CopyPlus className="h-3 w-3" />}
+                  {generatingSimilar ? "Generating..." : "Generate Similar"}
+                </Button>
+              </div>
+            )}
+            {similarAdded !== null && (
+              <p className="text-xs text-green-600 font-medium">+{similarAdded} questions added</p>
+            )}
+          </div>
+        )}
+        {/* Success confirmation for Good/Easy */}
+        {rating && RATING[rating].isCorrect && similarAdded !== null && (
+          <p className="text-xs text-green-600 font-medium mb-8">+{similarAdded} questions added</p>
+        )}
+
+        </div>{/* end LEFT COLUMN */}
+
+        {/* RIGHT COLUMN — Ask AI Tutor, sticky side panel (desktop only) */}
+        <div className="hidden lg:block w-[340px] shrink-0">
+          <div className="sticky top-16 max-h-[calc(100vh-8rem)] flex flex-col rounded-xl border border-border/60 bg-card shadow-sm overflow-hidden">
+            <div className="px-4 py-3 border-b border-border/40 bg-muted/30">
+              <h2 className="text-sm font-bold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+                <MessageCircleQuestion className="h-4 w-4" />
+                Ask AI Tutor
+                {askHistory.length > 0 && (
+                  <Badge variant="secondary" className="text-[10px] ml-2">{askHistory.length}</Badge>
                 )}
+              </h2>
+            </div>
+
+            {/* Scrollable Q&A history */}
+            <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
+              {askHistory.length === 0 && !askLoading && (
+                <p className="text-xs text-muted-foreground/50 text-center py-6">
+                  Ask anything about this problem
+                </p>
+              )}
+              {askHistory.map((item, i) => {
+                const isOpen = askExpanded.has(i);
+                return (
+                  <div key={i} className="rounded-lg border border-border/50 overflow-hidden">
+                    <button
+                      onClick={() => setAskExpanded((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(i)) next.delete(i); else next.add(i);
+                        return next;
+                      })}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-muted/40 transition-colors"
+                    >
+                      {isOpen ? <ChevronUp className="h-3 w-3 text-muted-foreground shrink-0" /> : <ChevronDown className="h-3 w-3 text-muted-foreground shrink-0" />}
+                      <span className="text-[11px] font-bold text-primary shrink-0">Q{i + 1}:</span>
+                      <span className="text-xs text-foreground truncate">{item.q}</span>
+                    </button>
+                    {isOpen && (
+                      <div className="px-3 pb-3 pt-1 border-t border-border/30 space-y-2">
+                        <p className="text-xs text-foreground whitespace-pre-wrap">{item.q}</p>
+                        <div className="flex gap-2">
+                          <span className="text-[11px] font-bold text-green-600 shrink-0 mt-0.5">A:</span>
+                          <MathContent className="text-xs leading-relaxed">{item.a}</MathContent>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {askLoading && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Thinking...
+                </div>
+              )}
+            </div>
+
+            {/* Input — pinned to bottom of panel */}
+            <div className="px-3 py-3 border-t border-border/40 bg-muted/20">
+              <div className="flex gap-2 items-end">
+                <textarea
+                  ref={askInputRef}
+                  value={askQuestion}
+                  onChange={(e) => {
+                    setAskQuestion(e.target.value);
+                    e.target.style.height = "auto";
+                    e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
+                  }}
+                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleAsk(); } }}
+                  placeholder="Ask anything..."
+                  rows={1}
+                  className="flex-1 text-xs px-2.5 py-2 rounded-md border border-border bg-background focus:outline-none focus:ring-1 focus:ring-primary resize-none overflow-hidden"
+                  style={{ minHeight: "32px" }}
+                  disabled={askLoading}
+                />
+                <Button size="sm" onClick={handleAsk} disabled={askLoading || !askQuestion.trim()} className="shrink-0 gap-1 h-8 px-2.5">
+                  {askLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+                </Button>
               </div>
             </div>
-            <Separator />
-            {!loadingCues && <CueReveal cues={cues} />}
+          </div>
+        </div>
+
+        {/* MOBILE — Ask AI Tutor inline (visible only on small screens) */}
+        <div className="lg:hidden w-full mb-10">
+          <h2 className="text-sm font-bold uppercase tracking-wide text-muted-foreground mb-5 flex items-center gap-1.5">
+            <MessageCircleQuestion className="h-4 w-4" />
+            Ask AI Tutor
+            {askHistory.length > 0 && (
+              <Badge variant="secondary" className="text-[10px] ml-2">{askHistory.length}</Badge>
+            )}
+          </h2>
+
+          {askHistory.length > 0 && (
+            <div className="space-y-2 mb-4">
+              {askHistory.map((item, i) => {
+                const isOpen = askExpanded.has(i);
+                return (
+                  <div key={i} className="rounded-lg border border-border/50 overflow-hidden">
+                    <button
+                      onClick={() => setAskExpanded((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(i)) next.delete(i); else next.add(i);
+                        return next;
+                      })}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-muted/40 transition-colors"
+                    >
+                      {isOpen ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground shrink-0" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+                      <span className="text-xs font-bold text-primary shrink-0">Q{i + 1}:</span>
+                      <span className="text-sm text-foreground truncate">{item.q}</span>
+                    </button>
+                    {isOpen && (
+                      <div className="px-3 pb-3 pt-1 border-t border-border/30 space-y-2">
+                        <p className="text-sm text-foreground whitespace-pre-wrap">{item.q}</p>
+                        <div className="flex gap-2">
+                          <span className="text-xs font-bold text-green-600 shrink-0 mt-1">A:</span>
+                          <MathContent className="text-sm leading-relaxed">{item.a}</MathContent>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {askLoading && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground py-2 mb-3">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Thinking...
+            </div>
+          )}
+
+          <div className="flex gap-2 items-end">
+            <textarea
+              value={askQuestion}
+              onChange={(e) => {
+                setAskQuestion(e.target.value);
+                e.target.style.height = "auto";
+                e.target.style.height = Math.min(e.target.scrollHeight, 160) + "px";
+              }}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleAsk(); } }}
+              placeholder="Ask anything — e.g. How do I start? What formula should I use?"
+              rows={1}
+              className="flex-1 text-sm px-3 py-2 rounded-md border border-border bg-background focus:outline-none focus:ring-1 focus:ring-primary resize-none overflow-hidden"
+              style={{ minHeight: "36px" }}
+              disabled={askLoading}
+            />
+            <Button size="sm" onClick={handleAsk} disabled={askLoading || !askQuestion.trim()} className="shrink-0 gap-1 h-9">
+              {askLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+            </Button>
           </div>
         </div>
       </main>
+
+      {/* Fixed bottom bar — navigation + rating */}
+      <div className="fixed bottom-0 left-0 right-0 z-30 bg-background/95 backdrop-blur border-t border-border/40">
+        <div className="max-w-6xl mx-auto px-4 py-2.5 flex items-center gap-3">
+          {/* Prev */}
+          <Button variant="ghost" size="sm" onClick={prevProblem} disabled={currentProblemIndex === 0} className="gap-1 shrink-0 h-9 px-2">
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+
+          {/* Center: rating or result */}
+          <div className="flex-1 min-w-0">
+            {!rating ? (
+              <div className="grid grid-cols-4 gap-1">
+                {(["again", "hard", "good", "easy"] as const).map((r) => (
+                  <button
+                    key={r}
+                    onClick={() => handleRate(r)}
+                    className={`py-2 rounded-md text-xs font-semibold transition-all border border-transparent hover:border-current ${RATING[r].className}`}
+                  >
+                    {RATING[r].label}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className={`text-center text-sm font-medium rounded-md py-1.5 ${
+                rating === "again" ? "bg-red-500/10 text-red-600" :
+                rating === "hard"  ? "bg-orange-500/10 text-orange-600" :
+                rating === "good"  ? "bg-blue-500/10 text-blue-600" :
+                                     "bg-green-500/10 text-green-600"
+              }`}>
+                {RATING[rating].label} — {RATING[rating].desc}
+              </div>
+            )}
+          </div>
+
+          {/* Next */}
+          <Button size="sm" variant={rating ? "default" : "ghost"} onClick={handleNext} className="gap-1 shrink-0 h-9 px-3">
+            {currentProblemIndex === problems.length - 1 ? "Finish" : "Next"}
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

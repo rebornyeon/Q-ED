@@ -15,14 +15,14 @@ export function StudyTimer({ isRunning, onTick }: StudyTimerProps) {
   useEffect(() => {
     if (!isRunning) return;
     const interval = setInterval(() => {
-      setSeconds((s) => {
-        const next = s + 1;
-        onTick?.(next);
-        return next;
-      });
+      setSeconds((s) => s + 1);
     }, 1000);
     return () => clearInterval(interval);
-  }, [isRunning, onTick]);
+  }, [isRunning]);
+
+  useEffect(() => {
+    if (seconds > 0) onTick?.(seconds);
+  }, [seconds, onTick]);
 
   const mins = Math.floor(seconds / 60);
   const secs = seconds % 60;
