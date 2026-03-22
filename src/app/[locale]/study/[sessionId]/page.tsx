@@ -14,7 +14,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Separator } from "@/components/ui/separator";
 import {
   ChevronLeft, ChevronRight, Trophy, AlertTriangle,
   Loader2, List, BookPlus, CopyPlus, CheckSquare, Square, Check,
@@ -51,10 +50,10 @@ export default function StudySessionPage({
 
   type DifficultyRating = "again" | "hard" | "good" | "easy";
   const RATING = {
-    again: { label: "Again",  desc: "Couldn't solve", isCorrect: false, offset: 2, maxRetries: 3, weight: 3, className: "border-red-500/40 hover:bg-red-500/10 hover:text-red-600 text-red-500" },
-    hard:  { label: "Hard",   desc: "Struggled",      isCorrect: false, offset: 4, maxRetries: 2, weight: 1, className: "border-orange-500/40 hover:bg-orange-500/10 hover:text-orange-600 text-orange-500" },
-    good:  { label: "Good",   desc: "Got it",          isCorrect: true,  offset: 0, maxRetries: 0, weight: 0, className: "border-blue-500/40 hover:bg-blue-500/10 hover:text-blue-600 text-blue-500" },
-    easy:  { label: "Easy",   desc: "No problem",      isCorrect: true,  offset: 0, maxRetries: 0, weight: 0, className: "border-green-500/40 hover:bg-green-500/10 hover:text-green-600 text-green-500" },
+    again: { label: "Again",  desc: "I couldn't solve it yet",          isCorrect: false, offset: 2, maxRetries: 3, weight: 3, className: "border-red-500/40 hover:bg-red-500/10 hover:text-red-600 text-red-500" },
+    hard:  { label: "Hard",   desc: "I got there, but it was painful", isCorrect: false, offset: 4, maxRetries: 2, weight: 1, className: "border-orange-500/40 hover:bg-orange-500/10 hover:text-orange-600 text-orange-500" },
+    good:  { label: "Good",   desc: "I understood the logic",          isCorrect: true,  offset: 0, maxRetries: 0, weight: 0, className: "border-blue-500/40 hover:bg-blue-500/10 hover:text-blue-600 text-blue-500" },
+    easy:  { label: "Easy",   desc: "No sweat, I've mastered this",    isCorrect: true,  offset: 0, maxRetries: 0, weight: 0, className: "border-green-500/40 hover:bg-green-500/10 hover:text-green-600 text-green-500" },
   } as const;
 
   const [loading, setLoading] = useState(true);
@@ -453,7 +452,7 @@ export default function StudySessionPage({
   const hasRealSections = questionGroups.some((g) => g.section !== "General") || questionGroups.length > 1;
 
   return (
-    <div className="min-h-screen bg-background pb-24">
+    <div className="min-h-screen bg-background">
       {/* Slim top nav — progress + secondary actions */}
       <div className="sticky top-0 z-30 bg-background/95 backdrop-blur border-b border-border/40">
         <div className="max-w-6xl mx-auto px-4 flex items-center justify-between h-12">
@@ -534,6 +533,11 @@ export default function StudySessionPage({
                                   {generatedIds.has(p.id) && <span className="text-xs font-semibold text-sky-600 bg-sky-500/15 px-1.5 py-0.5 rounded-full">✦ AI</span>}
                                   {needsRetry && !generatedIds.has(p.id) && <span className="text-xs font-semibold text-amber-600 bg-amber-500/15 px-1.5 py-0.5 rounded-full">⟳</span>}
                                   {p.is_exam_overlap && <span className="text-xs font-semibold text-red-600 bg-red-500/15 px-1.5 py-0.5 rounded-full">Exam</span>}
+                                  {p.exam_likelihood != null && p.exam_likelihood > 0 && (
+                                    <span className="text-[10px] text-red-500 tracking-tight" title={`Exam likelihood: ${p.exam_likelihood}/5`}>
+                                      {"●".repeat(p.exam_likelihood)}{"○".repeat(5 - p.exam_likelihood)}
+                                    </span>
+                                  )}
                                 </div>
                                 {p.concepts.length > 0 && (
                                   <div className="flex flex-wrap gap-1.5">
@@ -612,10 +616,10 @@ export default function StudySessionPage({
             {currentNeedsRetry && (
               <Badge variant="outline" className="text-[11px] border-0 bg-amber-500/10 text-amber-600 font-semibold">⟳ Retry</Badge>
             )}
-            {currentProblem.exam_likelihood != null && currentProblem.exam_likelihood >= 4 && (
-              <Badge variant="outline" className={`text-[11px] border-0 font-semibold ${currentProblem.exam_likelihood >= 5 ? "bg-red-500/10 text-red-600" : "bg-orange-500/10 text-orange-600"}`}>
-                Exam Focus
-              </Badge>
+            {currentProblem.exam_likelihood != null && currentProblem.exam_likelihood > 0 && (
+              <span className="text-[11px] text-red-500 tracking-tight" title={`Exam likelihood: ${currentProblem.exam_likelihood}/5`}>
+                {"●".repeat(currentProblem.exam_likelihood)}{"○".repeat(5 - currentProblem.exam_likelihood)}
+              </span>
             )}
             {currentProblem.is_exam_overlap && (
               <Badge variant="outline" className="text-[11px] border-0 bg-purple-500/10 text-purple-600 font-semibold">Past Exam</Badge>
@@ -649,34 +653,38 @@ export default function StudySessionPage({
           </div>
         )}
 
-        {/* Hero question block — prominent card */}
-        <div className="rounded-xl bg-card border border-border/60 shadow-md px-8 py-10 mb-3">
-          <MathContent className="text-2xl leading-loose font-serif">
+        {/* Hero question block — prominent card with Similar sparkle inside */}
+        {(() => {
+          const len = currentProblem.content.length;
+          const sizeClass = len < 100 ? "text-2xl leading-loose" : len < 300 ? "text-xl leading-relaxed" : len < 600 ? "text-base leading-relaxed" : "text-sm leading-normal";
+          return (
+        <div className="relative rounded-xl bg-card border border-border/60 shadow-md px-8 py-10 mb-3">
+          <MathContent className={`${sizeClass} font-serif`}>
             {currentProblem.content}
           </MathContent>
-        </div>
-
-        {/* Source + actions row below question */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground/50">
-            {documentTitle && <span className="font-medium">{documentTitle}</span>}
-            {currentProblem.section && <><span>·</span><span>{currentProblem.section}</span></>}
-            {currentProblem.page && <><span>·</span><span>p.{currentProblem.page}</span></>}
-            {currentProblem.problem_number && <><span>·</span><span>#{currentProblem.problem_number}</span></>}
-          </div>
+          {/* Similar button — pinned bottom-right of card */}
           <button
             onClick={handleGenerateSimilar}
             disabled={generatingSimilar}
-            className={`flex items-center gap-1.5 text-xs font-medium transition-all rounded-md px-2.5 py-1.5 ${
+            className={`absolute bottom-3 right-3 flex items-center gap-1.5 text-xs font-medium rounded-full px-3 py-1.5 transition-all border ${
               rating && !RATING[rating].isCorrect
-                ? "text-sky-600 bg-sky-500/10 hover:bg-sky-500/20 animate-pulse"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
-            } disabled:opacity-50`}
+                ? "border-sky-400/60 bg-sky-500/10 text-sky-600 hover:bg-sky-500/20 shadow-sm shadow-sky-500/10 animate-pulse"
+                : "border-border/60 bg-background/80 text-muted-foreground hover:text-foreground hover:border-primary/40 hover:bg-primary/5"
+            } disabled:opacity-50 backdrop-blur-sm hover:backdrop-blur-md`}
           >
             {generatingSimilar ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-            {generatingSimilar ? "Generating..." : "Generate Similar Questions"}
-            {similarAdded !== null && <span className="text-green-600 ml-1">+{similarAdded}</span>}
+            {generatingSimilar ? "Generating..." : similarAdded !== null ? `+${similarAdded} added` : "Generate Similar Problems"}
           </button>
+        </div>
+          );
+        })()}
+
+        {/* Source metadata */}
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground/50 mb-6">
+          {documentTitle && <span className="font-medium">{documentTitle}</span>}
+          {currentProblem.section && <><span>·</span><span>{currentProblem.section}</span></>}
+          {currentProblem.page && <><span>·</span><span>p.{currentProblem.page}</span></>}
+          {currentProblem.problem_number && <><span>·</span><span>#{currentProblem.problem_number}</span></>}
         </div>
 
         {/* Hint Stack — tighter gap from question */}
@@ -702,8 +710,6 @@ export default function StudySessionPage({
           </div>
           {!loadingCues && <CueReveal cues={cues} />}
         </div>
-
-        <Separator className="mb-10" />
 
         {/* Post-mortem — feedback + similar suggestion (only for Again/Hard) */}
         {rating && !RATING[rating].isCorrect && (feedback || showSuggestSimilar) && (
@@ -739,6 +745,75 @@ export default function StudySessionPage({
         {rating && RATING[rating].isCorrect && similarAdded !== null && (
           <p className="text-xs text-green-600 font-medium mb-8">+{similarAdded} questions added</p>
         )}
+
+        {/* Post-solve action pill — centered, floating feel */}
+        <div className="flex justify-center mt-10 mb-12">
+          <div className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-card shadow-sm px-1.5 py-1.5">
+            {/* Prev */}
+            <button
+              onClick={prevProblem}
+              disabled={currentProblemIndex === 0}
+              className="h-9 rounded-full flex items-center gap-1 px-3 text-xs font-semibold text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors disabled:opacity-30"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+              Prev
+            </button>
+
+            <div className="h-5 w-px bg-border/40 mx-0.5" />
+
+            {/* Rating buttons — compact colored circles with numbers */}
+            {!rating ? (
+              <div className="flex flex-col items-center gap-1">
+                <span className="text-[10px] text-muted-foreground/60">Personal Evaluation</span>
+                <div className="flex items-center gap-1">
+                {(["easy", "good", "hard", "again"] as const).map((r) => {
+                  const colorMap = {
+                    again: "bg-red-500 hover:bg-red-600 text-white",
+                    hard: "bg-orange-500 hover:bg-orange-600 text-white",
+                    good: "bg-blue-500 hover:bg-blue-600 text-white",
+                    easy: "bg-green-500 hover:bg-green-600 text-white",
+                  };
+                  const numberMap = { easy: "1", good: "2", hard: "3", again: "4" };
+                  return (
+                    <button
+                      key={r}
+                      onClick={() => handleRate(r)}
+                      className={`h-9 w-9 rounded-full flex items-center justify-center text-xs font-bold transition-all ${colorMap[r]} shadow-sm hover:scale-110`}
+                      title={`${numberMap[r]} — ${RATING[r].label}: ${RATING[r].desc}`}
+                    >
+                      {numberMap[r]}
+                    </button>
+                  );
+                })}
+                </div>
+              </div>
+            ) : (
+              <div className={`px-4 py-1.5 rounded-full text-xs font-semibold ${
+                rating === "again" ? "bg-red-500/10 text-red-600" :
+                rating === "hard"  ? "bg-orange-500/10 text-orange-600" :
+                rating === "good"  ? "bg-blue-500/10 text-blue-600" :
+                                     "bg-green-500/10 text-green-600"
+              }`}>
+                {RATING[rating].label}
+              </div>
+            )}
+
+            <div className="h-5 w-px bg-border/40 mx-0.5" />
+
+            {/* Next / Finish */}
+            <button
+              onClick={handleNext}
+              className={`h-9 rounded-full flex items-center gap-1 px-4 text-xs font-semibold transition-all ${
+                rating
+                  ? "bg-foreground text-background hover:opacity-90 shadow-sm"
+                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+              }`}
+            >
+              {currentProblemIndex === problems.length - 1 ? "Finish" : "Next"}
+              <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
 
         </div>{/* end LEFT COLUMN */}
 
@@ -896,47 +971,6 @@ export default function StudySessionPage({
         </div>
       </main>
 
-      {/* Fixed bottom bar — navigation + rating */}
-      <div className="fixed bottom-0 left-0 right-0 z-30 bg-background/95 backdrop-blur border-t border-border/40">
-        <div className="max-w-6xl mx-auto px-4 py-2.5 flex items-center gap-3">
-          {/* Prev */}
-          <Button variant="ghost" size="sm" onClick={prevProblem} disabled={currentProblemIndex === 0} className="gap-1 shrink-0 h-9 px-2">
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-
-          {/* Center: rating or result */}
-          <div className="flex-1 min-w-0">
-            {!rating ? (
-              <div className="grid grid-cols-4 gap-1">
-                {(["again", "hard", "good", "easy"] as const).map((r) => (
-                  <button
-                    key={r}
-                    onClick={() => handleRate(r)}
-                    className={`py-2 rounded-md text-xs font-semibold transition-all border border-transparent hover:border-current ${RATING[r].className}`}
-                  >
-                    {RATING[r].label}
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <div className={`text-center text-sm font-medium rounded-md py-1.5 ${
-                rating === "again" ? "bg-red-500/10 text-red-600" :
-                rating === "hard"  ? "bg-orange-500/10 text-orange-600" :
-                rating === "good"  ? "bg-blue-500/10 text-blue-600" :
-                                     "bg-green-500/10 text-green-600"
-              }`}>
-                {RATING[rating].label} — {RATING[rating].desc}
-              </div>
-            )}
-          </div>
-
-          {/* Next */}
-          <Button size="sm" variant={rating ? "default" : "ghost"} onClick={handleNext} className="gap-1 shrink-0 h-9 px-3">
-            {currentProblemIndex === problems.length - 1 ? "Finish" : "Next"}
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
     </div>
   );
 }

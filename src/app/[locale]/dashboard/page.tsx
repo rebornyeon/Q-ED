@@ -10,10 +10,10 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import {
-  Upload, BookOpen, Flame, Trophy,
-  Target, Zap, Brain, Shield, TrendingUp
+  Upload, BookOpen, Trophy,
+  Target, Zap, Brain, Shield, TrendingUp, TrendingDown, Clock
 } from "lucide-react";
-import type { ScoreData, Document as Doc } from "@/types";
+import type { ScoreData, StudySession } from "@/types";
 
 const DEFAULT_SCORE: ScoreData = {
   accuracy: 0,
@@ -42,10 +42,10 @@ export default async function DashboardPage({
     .eq("id", user.id)
     .single();
 
-  // Fetch recent documents
-  const { data: documents } = await supabase
-    .from("documents")
-    .select("*")
+  // Fetch recent study sessions (with document info) for the dashboard
+  const { data: recentSessions } = await supabase
+    .from("study_sessions")
+    .select("*, documents(title)")
     .eq("user_id", user.id)
     .order("created_at", { ascending: false })
     .limit(5);
@@ -155,7 +155,7 @@ export default async function DashboardPage({
             </CardContent>
           </Card>
 
-          {/* Recent documents */}
+          {/* Recent study sessions */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -164,7 +164,7 @@ export default async function DashboardPage({
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {!documents || documents.length === 0 ? (
+              {!recentSessions || recentSessions.length === 0 ? (
                 <div className="text-center py-10">
                   <Upload className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-30" />
                   <p className="text-sm text-muted-foreground mb-4">{t("noDocuments")}</p>
@@ -174,29 +174,47 @@ export default async function DashboardPage({
                 </div>
               ) : (
                 <div className="space-y-1">
-                  {(documents as Doc[]).map((doc, i) => {
-                    const analysis = doc.analysis;
-                    const hotConcepts = analysis?.concepts?.filter((c) => c.is_hot).slice(0, 2) ?? [];
+                  {(recentSessions as (StudySession & { documents: { title: string } | null })[]).map((session, i) => {
+                    const weakConcepts = (session.score_data?.weak_concepts as [string, number][] | undefined) ?? [];
 
                     return (
-                      <div key={doc.id}>
+                      <div key={session.id}>
                         {i > 0 && <Separator className="my-2" />}
                         <div className="py-2">
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex-1 min-w-0">
-                              <p className="font-medium text-sm truncate">{doc.title}</p>
-                              <div className="flex gap-1 mt-1 flex-wrap">
-                                {hotConcepts.map((c, j) => (
-                                  <Badge key={j} variant="secondary" className="text-xs gap-0.5">
-                                    <Flame className="h-2.5 w-2.5" />
-                                    {c.name}
-                                  </Badge>
-                                ))}
+                              <p className="font-medium text-sm truncate">
+                                {session.name ?? session.documents?.title ?? "Study Session"}
+                              </p>
+                              <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+                                <span className="flex items-center gap-1">
+                                  <Clock className="h-3 w-3" />
+                                  {new Date(session.created_at).toLocaleDateString(
+                                    locale === "ko" ? "ko-KR" : "en-US",
+                                    { month: "short", day: "numeric" }
+                                  )}
+                                </span>
+                                <Badge variant={session.status === "completed" ? "secondary" : "default"} className="text-[10px] px-1.5 py-0">
+                                  {session.status === "completed" ? "Done" : "Active"}
+                                </Badge>
                               </div>
+                              {weakConcepts.length > 0 && (
+                                <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                                  <TrendingDown className="h-3 w-3 text-amber-600 shrink-0" />
+                                  {weakConcepts.slice(0, 3).map(([concept, count]) => (
+                                    <span
+                                      key={concept}
+                                      className="text-[11px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-800 border border-amber-500/20 font-medium"
+                                    >
+                                      {concept} <span className="opacity-50">×{count}</span>
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
                             </div>
-                            <Link href={`/${locale}/study`}>
+                            <Link href={`/${locale}/study/${session.id}`}>
                               <Button size="sm" variant="outline" className="shrink-0 text-xs h-7">
-                                {t("startStudy")}
+                                {session.status === "completed" ? "Review" : t("startStudy")}
                               </Button>
                             </Link>
                           </div>
@@ -204,6 +222,13 @@ export default async function DashboardPage({
                       </div>
                     );
                   })}
+                  <div className="pt-2">
+                    <Link href={`/${locale}/study`}>
+                      <Button size="sm" variant="ghost" className="w-full text-xs text-muted-foreground">
+                        View All Sessions
+                      </Button>
+                    </Link>
+                  </div>
                 </div>
               )}
             </CardContent>
@@ -213,17 +238,16 @@ export default async function DashboardPage({
         {/* Cue type legend */}
         <Card className="bg-muted/30">
           <CardContent className="pt-4 pb-4">
-            <div className="flex flex-wrap gap-6 justify-center text-sm">
+            <div className="flex flex-wrap gap-4 justify-center text-sm">
               {[
-                { emoji: "🎯", label: "Kill Shot Cue", desc: "풀이 종결" },
-                { emoji: "⚠️", label: "Trap Cue", desc: "함정 방지" },
-                { emoji: "🔁", label: "Pattern Cue", desc: "구조 도식화" },
-                { emoji: "🚀", label: "Speed Cue", desc: "시간 단축" },
+                { label: "Kill Shot", accent: "border-l-orange-500 bg-orange-500/5", desc: "Solution finisher" },
+                { label: "Trap",      accent: "border-l-red-500 bg-red-500/5",       desc: "Avoid common mistakes" },
+                { label: "Pattern",   accent: "border-l-blue-500 bg-blue-500/5",     desc: "Structural recognition" },
+                { label: "Speed",     accent: "border-l-green-500 bg-green-500/5",   desc: "Time optimization" },
               ].map((c) => (
-                <div key={c.label} className="flex items-center gap-2">
-                  <span>{c.emoji}</span>
-                  <span className="font-medium">{c.label}</span>
-                  <span className="text-muted-foreground text-xs">— {c.desc}</span>
+                <div key={c.label} className={`flex items-center gap-2 border-l-3 ${c.accent} rounded-r-md px-3 py-1.5`}>
+                  <span className="font-medium text-xs">{c.label}</span>
+                  <span className="text-muted-foreground text-[11px]">— {c.desc}</span>
                 </div>
               ))}
             </div>
