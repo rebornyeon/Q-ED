@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm create:*)",
+      "Bash(where.exe pnpm:*)",
+      "Bash(where.exe npm:*)",
+      "Bash(where.exe npx:*)",
+      "Bash(export PATH=\"$PATH:/c/Users/rebor/AppData/Roaming/npm:/c/Program Files/nodejs:/c/Users/rebor/AppData/Local/pnpm\")",
+      "Read(//c/Program Files/**)",
+      "Read(//c/Users/rebor/AppData/Roaming/**)",
+      "Bash(cmd.exe /c \"where node\")",
+      "Bash(cmd.exe /c \"where pnpm\")",
+      "Bash(powershell.exe -Command \"winget install OpenJS.NodeJS.LTS --accept-source-agreements --accept-package-agreements\")",
+      "Bash(cmd.exe /c \"winget install OpenJS.NodeJS.LTS --accept-source-agreements --accept-package-agreements\")",
+      "Bash(cmd.exe /c \"node --version 2>&1 && npm --version 2>&1\")",
+      "Bash(powershell.exe -Command \"& {Invoke-WebRequest -Uri ''https://nodejs.org/dist/v22.14.0/node-v22.14.0-x64.msi'' -OutFile ''$env:TEMP\\\\node-install.msi''; Start-Process msiexec.exe -ArgumentList ''/i'', \"\"$env:TEMP\\\\node-install.msi\"\", ''/quiet'', ''/norestart'' -Wait -NoNewWindow; Write-Host ''Done''}\")",
+      "Bash(powershell.exe -Command \"& { $ProgressPreference = ''SilentlyContinue''; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $outPath = [System.IO.Path]::Combine\\($env:TEMP, ''node-install.msi''\\); Invoke-WebRequest -Uri ''https://nodejs.org/dist/v22.14.0/node-v22.14.0-x64.msi'' -OutFile $outPath -UseBasicParsing; Start-Process msiexec.exe -ArgumentList ''/i'', $outPath, ''/quiet'', ''/norestart'' -Wait -NoNewWindow; Write-Host ''Install complete'' }\")",
+      "Bash(powershell.exe -ExecutionPolicy Bypass -File \"C:/Users/rebor/QED/install-node.ps1\")",
+      "Bash(export PATH=\"/c/Program Files/nodejs:$PATH\")",
+      "Bash(npm --version)",
+      "Bash(powershell.exe -ExecutionPolicy Bypass -File \"C:/Users/rebor/QED/install-node-zip.ps1\")",
+      "Bash(npm install:*)",
+      "Bash(export PATH=\"/c/Program Files/nodejs:/c/Users/rebor/AppData/Roaming/npm:$PATH\")",
+      "Bash(pnpm build:*)"
+    ]
+  }
+}
