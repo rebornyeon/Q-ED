@@ -23,6 +23,7 @@ import {
   Sheet, SheetTrigger, SheetContent, SheetHeader, SheetTitle,
 } from "@/components/ui/sheet";
 import { SupplementaryUpload } from "@/components/supplementary-upload";
+import { MathContent } from "@/components/math-content";
 import type { Problem, Cue, ScoreData } from "@/types";
 
 export default function StudySessionPage({
@@ -65,6 +66,7 @@ export default function StudySessionPage({
   const [listOpen, setListOpen] = useState(false);
   const [suppOpen, setSuppOpen] = useState(false);
   const [documentId, setDocumentId] = useState<string | null>(null);
+  const [documentTitle, setDocumentTitle] = useState<string | null>(null);
   const [generatingSimilar, setGeneratingSimilar] = useState(false);
   const [similarAdded, setSimilarAdded] = useState<number | null>(null);
   const [weakConceptCounts, setWeakConceptCounts] = useState<Map<string, number>>(() => {
@@ -141,6 +143,9 @@ export default function StudySessionPage({
 
       if (problemsData) setProblems(problemsData as Problem[]);
       if (sessionData.document_id) setDocumentId(sessionData.document_id);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const docs = (sessionData as any).documents;
+      if (docs?.title) setDocumentTitle(docs.title);
       setLoading(false);
     }
     load();
@@ -644,9 +649,20 @@ export default function StudySessionPage({
                 </div>
               </CardHeader>
               <CardContent>
-                <p className="text-base leading-relaxed whitespace-pre-wrap">
+                <MathContent className="text-base leading-relaxed">
                   {currentProblem.content}
-                </p>
+                </MathContent>
+
+                {/* Source location */}
+                {(documentTitle || currentProblem.section || currentProblem.page || currentProblem.problem_number) && (
+                  <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground/60">
+                    {documentTitle && <span className="font-medium">{documentTitle}</span>}
+                    {currentProblem.section && <><span>·</span><span>{currentProblem.section}</span></>}
+                    {currentProblem.page && <><span>·</span><span>p.{currentProblem.page}</span></>}
+                    {currentProblem.problem_number && <><span>·</span><span>#{currentProblem.problem_number}</span></>}
+                  </div>
+                )}
+
                 {/* Tried checkbox */}
                 <div className="mt-4 pt-3 border-t border-border/40 flex items-center gap-3">
                   <button

@@ -180,6 +180,8 @@ export async function POST(request: NextRequest) {
       difficulty: p.difficulty,
       concepts: p.concepts,
       section: p.section ?? null,
+      page: p.page ?? null,
+      problem_number: p.problem_number ?? null,
       exam_likelihood: score.exam_likelihood,
       is_exam_overlap: score.is_exam_overlap,
     })),

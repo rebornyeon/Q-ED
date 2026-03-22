@@ -69,6 +69,8 @@ export interface Problem {
   difficulty: number | null; // 1-5
   concepts: string[];
   section: string | null;
+  page: number | null;
+  problem_number: string | null;
   exam_likelihood: number | null; // 1-5: how likely this appears on exam
   is_exam_overlap: boolean | null; // concepts overlap with past exam problems
   created_at: string;
@@ -114,6 +116,8 @@ export interface RawProblem {
   difficulty: number;
   concepts: string[];
   section: string | null;
+  page?: number | null;
+  problem_number?: string | null;
 }
 
 export interface SupplementaryDocument {

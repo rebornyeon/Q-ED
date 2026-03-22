@@ -45,7 +45,7 @@ async function splitPDFIntoChunks(base64Data: string): Promise<string[]> {
   return chunks;
 }
 
-type RawExtractedProblem = { content: string; problem_type: string; difficulty: number; concepts: string[]; section: string | null };
+type RawExtractedProblem = { content: string; problem_type: string; difficulty: number; concepts: string[]; section: string | null; page: number | null; problem_number: string | null };
 
 // 청크 하나에서 문제 목록 추출 (Cue 없이)
 async function extractProblemsFromChunk(
@@ -56,9 +56,9 @@ async function extractProblemsFromChunk(
 
   const prompt = `Math education expert. Analyze PDF section ${chunkIndex + 1}. Return JSON only, no cues.
 
-{"concepts":[{"name":"str","frequency":1,"is_hot":false,"is_trap":false,"is_key":false}],"problems":[{"content":"short problem text","problem_type":"str","difficulty":1,"concepts":["str"],"section":"Chapter 1: Title or Section name from PDF"}]}
+{"concepts":[{"name":"str","frequency":1,"is_hot":false,"is_trap":false,"is_key":false}],"problems":[{"content":"short problem text with $LaTeX$ math","problem_type":"str","difficulty":1,"concepts":["str"],"section":"Chapter 1: Title","page":3,"problem_number":"3.2a"}]}
 
-Rules: ALL problems included. content must be concise (≤100 chars). difficulty/frequency are integers 1-5. section MUST be the exact chapter or section heading as it appears in the PDF — include the number (e.g. "Chapter 3: Derivatives", "Section 2.1 Limits", "Part II", "Unit 4"). If no section structure is visible, use "General".`;
+Rules: ALL problems included. content must be concise (≤100 chars) and use LaTeX notation for any math expressions (e.g. $x^2$, $\frac{a}{b}$, $\int_0^1 f(x)\,dx$). difficulty/frequency are integers 1-5. section MUST be the exact chapter or section heading from the PDF. page is the PDF page number (integer) where the problem appears, null if unknown. problem_number is the label as printed in the PDF (e.g. "3.2a", "Problem 5", null if none).`;
 
   for (let attempt = 0; attempt < 3; attempt++) {
     const result = await model.generateContent([
