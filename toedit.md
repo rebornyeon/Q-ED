@@ -1,0 +1,2 @@
+issue 1: initial cues generated are not relevant to the question. every time i needed to regenerate cues.
+issue 2: add a space to type and ask a question in each question. gemini must receive full info of the questions and cues provided to student, along with the textbook definition and concepts that are needed for each questions - fixed
