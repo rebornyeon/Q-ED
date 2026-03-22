@@ -10,7 +10,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Loader2 } from "lucide-react";
+import { Loader2, CheckCircle2 } from "lucide-react";
+
+type View = "login" | "forgot";
 
 export default function LoginPage() {
   const t = useTranslations("auth");
@@ -20,10 +22,12 @@ export default function LoginPage() {
   const router = useRouter();
   const supabase = createClient();
 
+  const [view, setView] = useState<View>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [resetSent, setResetSent] = useState(false);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -43,19 +47,94 @@ export default function LoginPage() {
 
   async function handleGoogleLogin() {
     setLoading(true);
-    await supabase.auth.signInWithOAuth({
+    setError(null);
+    const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/${locale}/dashboard` },
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback?next=/${locale}/dashboard`,
+      },
     });
+    if (error) {
+      setError(error.message);
+      setLoading(false);
+    }
+  }
+
+  async function handleForgotPassword(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/${locale}/reset-password`,
+    });
+
+    if (error) {
+      setError(error.message);
+    } else {
+      setResetSent(true);
+    }
+    setLoading(false);
+  }
+
+  if (view === "forgot") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background px-4">
+        <div className="w-full max-w-sm">
+          <div className="text-center mb-8">
+            <Link href={`/${locale}`} className="text-2xl font-black tracking-tighter">Q:ED</Link>
+          </div>
+          <Card>
+            <CardHeader className="space-y-1">
+              <CardTitle className="text-2xl font-bold">{t("forgotPassword")}</CardTitle>
+              <CardDescription>이메일로 비밀번호 재설정 링크를 보내드립니다</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {resetSent ? (
+                <div className="text-center py-4 space-y-3">
+                  <CheckCircle2 className="h-10 w-10 text-green-500 mx-auto" />
+                  <p className="text-sm font-medium">이메일을 확인하세요</p>
+                  <p className="text-xs text-muted-foreground">{email}로 재설정 링크를 보냈습니다</p>
+                  <Button variant="outline" className="w-full mt-2" onClick={() => { setView("login"); setResetSent(false); }}>
+                    로그인으로 돌아가기
+                  </Button>
+                </div>
+              ) : (
+                <form onSubmit={handleForgotPassword} className="space-y-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="reset-email">{t("email")}</Label>
+                    <Input
+                      id="reset-email"
+                      type="email"
+                      placeholder={t("emailPlaceholder")}
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                      disabled={loading}
+                    />
+                  </div>
+                  {error && <p className="text-sm text-destructive">{error}</p>}
+                  <Button type="submit" className="w-full" disabled={loading}>
+                    {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    재설정 링크 전송
+                  </Button>
+                  <Button type="button" variant="ghost" className="w-full" onClick={() => setView("login")}>
+                    {tc("back")}
+                  </Button>
+                </form>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <Link href={`/${locale}`} className="text-2xl font-black tracking-tighter">
-            Q:ED
-          </Link>
+          <Link href={`/${locale}`} className="text-2xl font-black tracking-tighter">Q:ED</Link>
         </div>
 
         <Card>
@@ -64,12 +143,7 @@ export default function LoginPage() {
             <CardDescription>{tc("appTagline")}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={handleGoogleLogin}
-              disabled={loading}
-            >
+            <Button variant="outline" className="w-full" onClick={handleGoogleLogin} disabled={loading}>
               <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
                 <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
                 <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
@@ -99,7 +173,16 @@ export default function LoginPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="password">{t("password")}</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="password">{t("password")}</Label>
+                  <button
+                    type="button"
+                    className="text-xs text-muted-foreground hover:text-primary underline-offset-2 hover:underline"
+                    onClick={() => { setError(null); setView("forgot"); }}
+                  >
+                    {t("forgotPassword")}
+                  </button>
+                </div>
                 <Input
                   id="password"
                   type="password"
@@ -111,9 +194,7 @@ export default function LoginPage() {
                 />
               </div>
 
-              {error && (
-                <p className="text-sm text-destructive">{error}</p>
-              )}
+              {error && <p className="text-sm text-destructive">{error}</p>}
 
               <Button type="submit" className="w-full" disabled={loading}>
                 {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

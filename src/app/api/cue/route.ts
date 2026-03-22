@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { generateCuesForProblem } from "@/lib/gemini";
+import type { SupplementaryInsights } from "@/types";
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
@@ -27,8 +28,28 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ cues: existingCues });
   }
 
-  // Generate new cues with Gemini
-  const generatedCues = await generateCuesForProblem(problemContent);
+  // Get document_id from problem to fetch supplementary context
+  const { data: problem } = await supabase
+    .from("problems")
+    .select("document_id")
+    .eq("id", problemId)
+    .single();
+
+  let supplementaryContext: SupplementaryInsights[] | undefined;
+  if (problem?.document_id) {
+    const { data: suppDocs } = await supabase
+      .from("supplementary_documents")
+      .select("insights")
+      .eq("document_id", problem.document_id)
+      .eq("user_id", user.id);
+
+    if (suppDocs && suppDocs.length > 0) {
+      supplementaryContext = suppDocs.map((d) => d.insights as SupplementaryInsights);
+    }
+  }
+
+  // Generate new cues with Gemini (enriched with supplementary context)
+  const generatedCues = await generateCuesForProblem(problemContent, supplementaryContext);
 
   const { data: cues, error } = await supabase
     .from("cues")

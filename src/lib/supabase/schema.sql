@@ -43,10 +43,13 @@ create table if not exists study_sessions (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references profiles(id) on delete cascade not null,
   document_id uuid references documents(id) on delete cascade not null,
+  name text,
   status text default 'active' check (status in ('active', 'completed')),
   score_data jsonb,
   created_at timestamptz default now()
 );
+-- Migration (기존 테이블에 name 컬럼 추가):
+-- alter table study_sessions add column if not exists name text;
 
 -- 문제
 create table if not exists problems (
@@ -57,8 +60,31 @@ create table if not exists problems (
   problem_type text,
   difficulty int check (difficulty between 1 and 5),
   concepts text[] default '{}',
+  section text,
+  exam_likelihood int check (exam_likelihood between 1 and 5),
+  is_exam_overlap boolean default false,
   created_at timestamptz default now()
 );
+-- Migrations:
+-- alter table problems add column if not exists section text;
+-- alter table problems add column if not exists exam_likelihood int check (exam_likelihood between 1 and 5);
+-- alter table problems add column if not exists is_exam_overlap boolean default false;
+
+-- 보조 자료 (과거 시험, 교수 노트 등)
+create table if not exists supplementary_documents (
+  id uuid primary key default gen_random_uuid(),
+  document_id uuid references documents(id) on delete cascade not null,
+  user_id uuid references profiles(id) on delete cascade not null,
+  title text not null,
+  file_path text not null,
+  insights jsonb not null default '{}',
+  problems jsonb not null default '[]',
+  created_at timestamptz default now()
+);
+-- Migration: alter table supplementary_documents add column if not exists problems jsonb not null default '[]';
+alter table supplementary_documents enable row level security;
+create policy "Users can manage own supplementary docs" on supplementary_documents for all using (auth.uid() = user_id);
+-- Migration: run the above create table + alter + create policy statements
 
 -- Cue (단서)
 create table if not exists cues (

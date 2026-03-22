@@ -44,6 +44,7 @@ export interface StudySession {
   id: string;
   user_id: string;
   document_id: string;
+  name: string | null;
   status: "active" | "completed";
   score_data: ScoreData | null;
   created_at: string;
@@ -56,6 +57,7 @@ export interface ScoreData {
   pattern_recognition: number; // 0-100
   trap_avoidance: number; // 0-100
   thinking_depth: number; // 0-100
+  weak_concepts?: [string, number][]; // [concept, weight] sorted desc
 }
 
 export interface Problem {
@@ -66,6 +68,9 @@ export interface Problem {
   problem_type: string | null;
   difficulty: number | null; // 1-5
   concepts: string[];
+  section: string | null;
+  exam_likelihood: number | null; // 1-5: how likely this appears on exam
+  is_exam_overlap: boolean | null; // concepts overlap with past exam problems
   created_at: string;
   cues?: Cue[];
 }
@@ -92,6 +97,35 @@ export interface AttemptLog {
   created_at: string;
 }
 
+export type SupplementaryDocType = "past_exam" | "prof_notes" | "study_guide" | "formula_sheet" | "other";
+
+export interface SupplementaryInsights {
+  emphasized_topics: string[];
+  exam_patterns: string[];
+  study_tips: string[];
+  key_formulas: string[];
+  summary: string;
+  doc_type?: SupplementaryDocType;
+}
+
+export interface RawProblem {
+  content: string;
+  problem_type: string;
+  difficulty: number;
+  concepts: string[];
+  section: string | null;
+}
+
+export interface SupplementaryDocument {
+  id: string;
+  document_id: string;
+  title: string;
+  file_path: string;
+  insights: SupplementaryInsights;
+  problems: RawProblem[];
+  created_at: string;
+}
+
 export interface GeminiAnalysisResult {
   concepts: Concept[];
   problems: GeneratedProblem[];
@@ -104,6 +138,7 @@ export interface GeneratedProblem {
   problem_type: string;
   difficulty: number;
   concepts: string[];
+  section: string | null;
   cues: GeneratedCue[];
 }
 
