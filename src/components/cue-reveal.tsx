@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useTranslations } from "next-intl";
 import { CueCard } from "./cue-card";
 import { useCueStore } from "@/stores/cue-store";
 import { Lightbulb, ChevronDown } from "lucide-react";
@@ -20,7 +19,6 @@ interface CueRevealProps {
 }
 
 export function CueReveal({ cues }: CueRevealProps) {
-  const t = useTranslations("study");
   const { revealedLevel, revealNextLevel, showWhy, toggleWhy } = useCueStore();
   // Track which cue levels are manually expanded (latest is auto-expanded)
   const [manualExpanded, setManualExpanded] = useState<Set<number>>(new Set());
