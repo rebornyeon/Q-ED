@@ -93,7 +93,7 @@ export default function StudySessionPage({
   const [showSuggestSimilar, setShowSuggestSimilar] = useState(false);
   const [startingWeakSession, setStartingWeakSession] = useState(false);
   const [askQuestion, setAskQuestion] = useState("");
-  const [askAnswer, setAskAnswer] = useState<string | null>(null);
+  const [, setAskAnswer] = useState<string | null>(null);
   const [askLoading, setAskLoading] = useState(false);
   const [askHistory, setAskHistory] = useState<{ q: string; a: string }[]>([]);
   const [askExpanded, setAskExpanded] = useState<Set<number>>(new Set());
@@ -973,4 +973,4 @@ export default function StudySessionPage({
 
     </div>
   );
-}
+} //

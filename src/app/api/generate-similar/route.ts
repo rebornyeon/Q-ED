@@ -67,14 +67,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Failed to generate similar problems" }, { status: 500 });
   }
 
-  return insertAndReturn(supabase, problem, generated, count);
+  return insertAndReturn(supabase, problem, generated);
 }
 
 async function insertAndReturn(
   supabase: Awaited<ReturnType<typeof import("@/lib/supabase/server").createClient>>,
   problem: { session_id: string; document_id: string; exam_likelihood: number | null; is_exam_overlap: boolean | null },
-  generated: Array<{ content: string; problem_type: string; difficulty: number; concepts: string[]; section: string | null }>,
-  count: number
+  generated: Array<{ content: string; problem_type: string; difficulty: number; concepts: string[]; section: string | null }>
 ) {
   const toInsert = generated.map((p) => ({
     session_id: problem.session_id,
