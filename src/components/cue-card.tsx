@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import type { Cue, CueType } from "@/types";
+import { MathContent } from "@/components/math-content";
 
 const CUE_META: Record<CueType, { emoji: string; color: string; labelKey: string }> = {
   kill_shot: { emoji: "🎯", color: "text-orange-500", labelKey: "killShot" },
@@ -42,7 +43,7 @@ export function CueCard({ cue, showWhy, onToggleWhy }: CueCardProps) {
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
-        <p className="text-sm leading-relaxed font-medium">{cue.content}</p>
+        <MathContent className="text-sm leading-relaxed font-medium">{cue.content}</MathContent>
 
         {cue.why_explanation && (
           <>
@@ -57,9 +58,9 @@ export function CueCard({ cue, showWhy, onToggleWhy }: CueCardProps) {
             {showWhy && (
               <>
                 <Separator />
-                <p className="text-xs text-muted-foreground leading-relaxed pl-2 border-l-2 border-primary/30">
+                <MathContent className="text-xs text-muted-foreground leading-relaxed pl-2 border-l-2 border-primary/30">
                   {cue.why_explanation}
-                </p>
+                </MathContent>
               </>
             )}
           </>

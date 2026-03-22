@@ -66,6 +66,10 @@ export default function UploadPage() {
   const [supplementaryDocs, setSupplementaryDocs] = useState<SupplementaryDocument[]>([]);
   const [includeSupplementary, setIncludeSupplementary] = useState(false);
 
+  // Session creation state
+  const [startingStudy, setStartingStudy] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
+
   // ── File management ──────────────────────────────────────────────
   function addFiles(newFiles: FileList | null) {
     if (!newFiles) return;
@@ -139,20 +143,32 @@ export default function UploadPage() {
   async function handleStartStudy() {
     const documentIds = fileResults.map((r) => r.documentId);
     if (documentIds.length === 0) return;
+    setStartingStudy(true);
+    setStartError(null);
 
-    const res = await fetch("/api/session", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        documentIds,
-        conceptFilter: selectedConcepts.size > 0 ? Array.from(selectedConcepts) : null,
-        includeSupplementary,
-      }),
-    });
+    try {
+      const res = await fetch("/api/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          documentIds,
+          conceptFilter: selectedConcepts.size > 0 ? Array.from(selectedConcepts) : null,
+          includeSupplementary,
+        }),
+      });
 
-    if (res.ok) {
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setStartError(data.error ?? `Server error (${res.status}) — check console for details`);
+        return;
+      }
+
       const data = await res.json();
       router.push(`/${locale}/study/${data.session.id}`);
+    } catch (e) {
+      setStartError(e instanceof Error ? e.message : "Network error — could not reach server");
+    } finally {
+      setStartingStudy(false);
     }
   }
 
@@ -389,9 +405,36 @@ export default function UploadPage() {
               </CardContent>
             </Card>
 
-            <Button className="w-full" size="lg" onClick={handleStartStudy}>
-              🚀 {selectedConcepts.size > 0 ? `선택한 ${selectedConcepts.size}개 개념으로 학습 시작` : "전체 학습 시작"}
+            <Button
+              className="w-full"
+              size="lg"
+              onClick={handleStartStudy}
+              disabled={startingStudy}
+            >
+              {startingStudy
+                ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />세션 준비 중... (잠시 기다려주세요)</>
+                : <>🚀 {selectedConcepts.size > 0 ? `선택한 ${selectedConcepts.size}개 개념으로 학습 시작` : "전체 학습 시작"}</>
+              }
             </Button>
+
+            {startingStudy && (
+              <div className="text-center space-y-1">
+                <p className="text-xs text-muted-foreground animate-pulse">
+                  문제를 구성하고 Cue를 생성하는 중입니다 — 보통 10~30초 소요됩니다
+                </p>
+                <Progress value={null} className="h-1 max-w-xs mx-auto opacity-50" />
+              </div>
+            )}
+
+            {startError && (
+              <div className="flex items-start gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium">학습 시작 실패</p>
+                  <p className="text-xs mt-0.5 opacity-80">{startError}</p>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </main>

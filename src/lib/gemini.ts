@@ -6,6 +6,82 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
 const PAGES_PER_CHUNK = 5; // 한 번에 처리할 페이지 수
 
+// Robustly parse JSON from a Gemini response.
+// Handles: markdown code fences, unescaped LaTeX backslashes, leading/trailing whitespace.
+function parseGeminiJson<T>(raw: string): T {
+  let text = raw.trim();
+
+  // Strip ```json ... ``` or ``` ... ``` fences if present
+  const fence = text.match(/^```(?:json)?\s*([\s\S]*?)```\s*$/);
+  if (fence) text = fence[1].trim();
+
+  // Fix unescaped LaTeX backslashes inside JSON strings.
+  // Strategy: only fix backslashes that are inside double-quoted strings.
+  // We walk character by character to avoid mangling already-valid escapes.
+  text = fixBackslashesInJsonStrings(text);
+
+  return JSON.parse(text) as T;
+}
+
+// Fix bare LaTeX backslashes (e.g. \frac, \int) inside JSON string values.
+// Valid JSON escape sequences (\", \\, \/, \b, \f, \n, \r, \t, \uXXXX) are left alone.
+function fixBackslashesInJsonStrings(text: string): string {
+  // Chars that are ALWAYS valid JSON escapes and never LaTeX
+  const alwaysEscape = new Set(['"', '\\', '/']);
+  // Chars that are JSON escapes BUT could also start LaTeX commands (\beta, \frac, \nabla, \theta, \rho)
+  const ambiguous = new Set(['b', 'f', 'n', 'r', 't']);
+
+  let result = "";
+  let inString = false;
+  let i = 0;
+  while (i < text.length) {
+    const ch = text[i];
+    if (!inString) {
+      if (ch === '"') inString = true;
+      result += ch;
+      i++;
+    } else {
+      if (ch === '\\') {
+        const next = text[i + 1];
+        if (next !== undefined && alwaysEscape.has(next)) {
+          // Definitely a JSON escape: \", \\, \/
+          result += ch + next;
+          i += 2;
+        } else if (next === 'u' && /^[0-9a-fA-F]{4}/.test(text.substring(i + 2, i + 6))) {
+          // Unicode escape \uXXXX
+          result += text.substring(i, i + 6);
+          i += 6;
+        } else if (next !== undefined && ambiguous.has(next)) {
+          // Could be JSON escape (\n, \t) OR LaTeX (\nabla, \theta, \beta, \frac, \rho)
+          // Heuristic: if followed by another letter, it's LaTeX
+          const afterNext = text[i + 2];
+          if (afterNext !== undefined && /[a-zA-Z]/.test(afterNext)) {
+            // LaTeX command like \beta, \frac, \nabla — double the backslash
+            result += "\\\\";
+            i++;
+          } else {
+            // Actual JSON escape like \n or \t at end of word
+            result += ch + next;
+            i += 2;
+          }
+        } else {
+          // Any other backslash (LaTeX: \alpha, \gamma, \int, \{, etc.) — double it
+          result += "\\\\";
+          i++;
+        }
+      } else if (ch === '"') {
+        inString = false;
+        result += ch;
+        i++;
+      } else {
+        result += ch;
+        i++;
+      }
+    }
+  }
+  return result;
+}
+
 function getJsonModel() {
   return genAI.getGenerativeModel({
     model: "gemini-2.5-flash",
@@ -47,6 +123,22 @@ async function splitPDFIntoChunks(base64Data: string): Promise<string[]> {
 
 type RawExtractedProblem = { content: string; problem_type: string; difficulty: number; concepts: string[]; section: string | null; page: number | null; problem_number: string | null };
 
+// Normalize extracted problems: ensure concepts is always an array, content is a string, etc.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function normProblems(raw: any[]): RawExtractedProblem[] {
+  return raw
+    .filter((p) => p && typeof p === "object" && typeof p.content === "string" && p.content.length > 0)
+    .map((p) => ({
+      content: p.content,
+      problem_type: typeof p.problem_type === "string" ? p.problem_type : "unknown",
+      difficulty: typeof p.difficulty === "number" ? p.difficulty : 3,
+      concepts: Array.isArray(p.concepts) ? p.concepts.filter((c: unknown) => typeof c === "string") : [],
+      section: typeof p.section === "string" ? p.section : null,
+      page: typeof p.page === "number" ? p.page : null,
+      problem_number: p.problem_number != null ? String(p.problem_number) : null,
+    }));
+}
+
 // 청크 하나에서 문제 목록 추출 (Cue 없이)
 async function extractProblemsFromChunk(
   base64Chunk: string,
@@ -56,9 +148,17 @@ async function extractProblemsFromChunk(
 
   const prompt = `Math education expert. Analyze PDF section ${chunkIndex + 1}. Return JSON only, no cues.
 
-{"concepts":[{"name":"str","frequency":1,"is_hot":false,"is_trap":false,"is_key":false}],"problems":[{"content":"short problem text with $LaTeX$ math","problem_type":"str","difficulty":1,"concepts":["str"],"section":"Chapter 1: Title","page":3,"problem_number":"3.2a"}]}
+{"concepts":[{"name":"str","frequency":1,"is_hot":false,"is_trap":false,"is_key":false}],"problems":[{"content":"Full problem statement with all given information, conditions, and what to find/prove. Use $LaTeX$ for math.","problem_type":"str","difficulty":1,"concepts":["str"],"section":"Chapter 1: Title","page":3,"problem_number":"3.2a"}]}
 
-Rules: ALL problems included. content must be concise (≤100 chars) and use LaTeX notation for any math expressions (e.g. $x^2$, $\frac{a}{b}$, $\int_0^1 f(x)\,dx$). difficulty/frequency are integers 1-5. section MUST be the exact chapter or section heading from the PDF. page is the PDF page number (integer) where the problem appears, null if unknown. problem_number is the label as printed in the PDF (e.g. "3.2a", "Problem 5", null if none).`;
+Rules:
+- Extract ALL problems from the PDF.
+- content MUST include the COMPLETE problem statement — all given information, conditions, constraints, definitions, and what the student needs to find, prove, or compute. A student must be able to solve the problem from the content alone without looking at the PDF. Do NOT truncate or summarize.
+- Use LaTeX notation for all math: inline $x^2$, $\\frac{a}{b}$, $\\int_0^1 f(x)\\,dx$.
+- If a problem references a figure, matrix, table, or equation from the textbook, reproduce the relevant data in the content (e.g. write out the matrix, describe the figure, state the equation).
+- difficulty/frequency are integers 1-5.
+- section: exact chapter or section heading from the PDF.
+- page: PDF page number (integer), null if unknown.
+- problem_number: the label as printed (e.g. "3.2a", "Problem 5"), null if none.`;
 
   for (let attempt = 0; attempt < 3; attempt++) {
     const result = await model.generateContent([
@@ -73,7 +173,68 @@ Rules: ALL problems included. content must be concise (≤100 chars) and use LaT
     }
 
     try {
-      return JSON.parse(result.response.text().trim());
+      const rawText = result.response.text();
+      console.log(`Chunk ${chunkIndex + 1} attempt ${attempt + 1} raw (${rawText.length} chars):`, rawText.slice(0, 400));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let parsed: any = parseGeminiJson(rawText);
+
+      // null, undefined, empty, primitives — chunk has no extractable content
+      if (parsed == null || typeof parsed === "string" || typeof parsed === "number" || typeof parsed === "boolean") {
+        console.log(`Chunk ${chunkIndex + 1}: non-object response (${typeof parsed}), skipping`);
+        return { concepts: [], problems: [] };
+      }
+      if (typeof parsed === "object" && !Array.isArray(parsed) && Object.keys(parsed).length === 0) {
+        console.log(`Chunk ${chunkIndex + 1}: empty object, skipping`);
+        return { concepts: [], problems: [] };
+      }
+      // Unwrap if Gemini wrapped in an array: [{concepts, problems}]
+      if (Array.isArray(parsed) && parsed.length === 1 && parsed[0] && typeof parsed[0] === "object" && !Array.isArray(parsed[0])) {
+        parsed = parsed[0];
+      }
+      // Empty array — no problems
+      if (Array.isArray(parsed) && parsed.length === 0) {
+        return { concepts: [], problems: [] };
+      }
+      // If Gemini returned an array — could be problems, concepts, or mixed
+      if (Array.isArray(parsed)) {
+        // Try to extract any problem-like objects from the array
+        const problems = normProblems(parsed);
+        if (problems.length > 0) {
+          return { concepts: [], problems };
+        }
+        // Array had no valid problems (maybe array of concepts or strings)
+        console.log(`Chunk ${chunkIndex + 1}: array with ${parsed.length} items but no valid problems, skipping`);
+        return { concepts: [], problems: [] };
+      }
+      // Has problems key (standard shape, with or without concepts)
+      if (parsed && typeof parsed === "object" && "problems" in parsed) {
+        return {
+          concepts: Array.isArray(parsed.concepts) ? parsed.concepts : [],
+          problems: normProblems(Array.isArray(parsed.problems) ? parsed.problems : []),
+        };
+      }
+      // Object but no problems key — check if it IS a single problem, or dig for nested problems
+      if (parsed && typeof parsed === "object") {
+        if (parsed.content && typeof parsed.content === "string") {
+          console.log(`Chunk ${chunkIndex + 1}: single problem object, wrapping`);
+          return { concepts: [], problems: normProblems([parsed]) };
+        }
+        // Search one level deep for any array that contains problem-like objects
+        for (const key of Object.keys(parsed)) {
+          if (Array.isArray(parsed[key])) {
+            const found = normProblems(parsed[key]);
+            if (found.length > 0) {
+              console.log(`Chunk ${chunkIndex + 1}: found ${found.length} problems under key "${key}"`);
+              return { concepts: Array.isArray(parsed.concepts) ? parsed.concepts : [], problems: found };
+            }
+          }
+        }
+        console.log(`Chunk ${chunkIndex + 1}: no problems found, skipping. Keys: ${Object.keys(parsed).join(", ")}`);
+        return { concepts: Array.isArray(parsed.concepts) ? parsed.concepts : [], problems: [] };
+      }
+      // Absolute fallback — should never reach here
+      console.warn(`Chunk ${chunkIndex + 1}: unhandled type ${typeof parsed}, skipping`);
+      return { concepts: [], problems: [] };
     } catch {
       console.warn(`Chunk ${chunkIndex + 1} JSON parse failed on attempt ${attempt + 1}`);
       if (attempt === 2) return { concepts: [], problems: [] };
@@ -113,7 +274,12 @@ Return exactly this JSON array:
 Return exactly 4 elements. All text must be in English.`;
 
   const result = await model.generateContent(prompt);
-  return JSON.parse(result.response.text().trim()) as GeneratedCue[];
+  try {
+    return parseGeminiJson(result.response.text()) as GeneratedCue[];
+  } catch {
+    console.warn("generateCuesForProblem JSON parse failed, returning empty cues");
+    return [];
+  }
 }
 
 // 보조 PDF 분석: 인사이트(첫 10페이지) + 문제 전체 추출(청킹)
@@ -145,7 +311,7 @@ Extract what this material emphasizes for exam preparation. Keep each list conci
       { inlineData: { data: previewBase64, mimeType: "application/pdf" } },
       insightPrompt,
     ]);
-    try { insights = JSON.parse(result.response.text().trim()); break; } catch { /* retry */ }
+    try { insights = parseGeminiJson(result.response.text()); break; } catch { /* retry */ }
   }
 
   // 2. Extract all problems from full PDF (same chunking as main PDF)
@@ -166,16 +332,16 @@ async function generateTargetedProblems(conceptName: string): Promise<RawExtract
   const prompt = `Math education expert. The concept "${conceptName}" was identified as important in a PDF but has no practice problems yet. Generate 1-2 representative math problems that directly test this concept.
 
 Return JSON array only:
-[{"content":"problem text (≤120 chars)","problem_type":"str","difficulty":3,"concepts":["${conceptName}"],"section":null}]
+[{"content":"Complete problem statement with all given info and what to find/prove. Use $LaTeX$ for math.","problem_type":"str","difficulty":3,"concepts":["${conceptName}"],"section":null,"page":null,"problem_number":null}]
 
-Rules: problems must be self-contained and testable. difficulty 1-5. Return 1 object if concept is narrow, 2 if broad.`;
+Rules: problems must be fully self-contained — a student must be able to solve each problem from the content alone. Include all given values, conditions, and what to compute/prove. Use LaTeX for math notation. difficulty 1-5. Return 1 if concept is narrow, 2 if broad.`;
 
   for (let attempt = 0; attempt < 2; attempt++) {
     const result = await model.generateContent(prompt);
     const finishReason = result.response.candidates?.[0]?.finishReason;
     if (finishReason === "MAX_TOKENS") continue;
     try {
-      const parsed = JSON.parse(result.response.text().trim());
+      const parsed = parseGeminiJson(result.response.text());
       return Array.isArray(parsed) ? parsed : [];
     } catch {
       if (attempt === 1) return [];
@@ -301,9 +467,10 @@ Instructions:
 2. Generate ${count} new problems based directly on the textbook's content — use its exact notation, formula conventions, and problem structure
 3. Each problem must be distinct from the original and from each other (vary the numbers, functions, or scenarios)
 4. Match the difficulty level (${original.difficulty}/5) and problem type
+5. Each problem MUST be fully self-contained — include all given information, conditions, matrices, equations, and what to find/prove. A student must be able to solve it from the content alone.
 
 Return JSON array only:
-[{"content":"problem text using textbook notation","problem_type":"${original.problem_type}","difficulty":${original.difficulty},"concepts":${JSON.stringify(original.concepts)},"section":${JSON.stringify(original.section)}}]
+[{"content":"Complete problem statement with all given info. Use $LaTeX$ for math.","problem_type":"${original.problem_type}","difficulty":${original.difficulty},"concepts":${JSON.stringify(original.concepts)},"section":${JSON.stringify(original.section)},"page":null,"problem_number":null}]
 
 Return exactly ${count} objects. All text in English.`;
 
@@ -315,7 +482,7 @@ Return exactly ${count} objects. All text in English.`;
     const finishReason = result.response.candidates?.[0]?.finishReason;
     if (finishReason === "MAX_TOKENS") continue;
     try {
-      const parsed = JSON.parse(result.response.text().trim());
+      const parsed = parseGeminiJson(result.response.text());
       return Array.isArray(parsed) ? parsed.slice(0, count) : [];
     } catch {
       if (attempt === 1) return [];
