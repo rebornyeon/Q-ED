@@ -1,7 +1,10 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { PDFDocument } from "pdf-lib";
 import type { GeminiAnalysisResult, GeneratedCue, GeneratedProblem } from "@/types";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+
+const PAGES_PER_CHUNK = 15; // 한 번에 처리할 페이지 수
 
 function getJsonModel() {
   return genAI.getGenerativeModel({
@@ -9,7 +12,7 @@ function getJsonModel() {
     generationConfig: {
       responseMimeType: "application/json",
       temperature: 0.3,
-      maxOutputTokens: 32768,
+      maxOutputTokens: 65536,
     },
   });
 }
@@ -21,26 +24,43 @@ function getTextModel() {
   });
 }
 
-// 1단계: PDF에서 개념 + 문제 목록만 추출 (Cue 없음 → 출력 작음)
-async function extractProblemsFromPDF(
-  base64Data: string,
-  mimeType: string
-): Promise<{ summary: string; concepts: GeminiAnalysisResult["concepts"]; problem_types: GeminiAnalysisResult["problem_types"]; problems: Array<{ content: string; problem_type: string; difficulty: number; concepts: string[] }> }> {
+// PDF를 N페이지씩 청크로 분할 → base64 배열 반환
+async function splitPDFIntoChunks(base64Data: string): Promise<string[]> {
+  const pdfBytes = Buffer.from(base64Data, "base64");
+  const srcDoc = await PDFDocument.load(pdfBytes);
+  const totalPages = srcDoc.getPageCount();
+  const chunks: string[] = [];
+
+  for (let start = 0; start < totalPages; start += PAGES_PER_CHUNK) {
+    const end = Math.min(start + PAGES_PER_CHUNK, totalPages);
+    const chunkDoc = await PDFDocument.create();
+    const pageIndices = Array.from({ length: end - start }, (_, i) => start + i);
+    const copiedPages = await chunkDoc.copyPages(srcDoc, pageIndices);
+    copiedPages.forEach((page) => chunkDoc.addPage(page));
+
+    const chunkBytes = await chunkDoc.save();
+    chunks.push(Buffer.from(chunkBytes).toString("base64"));
+  }
+
+  return chunks;
+}
+
+// 청크 하나에서 문제 목록 추출 (Cue 없이)
+async function extractProblemsFromChunk(
+  base64Chunk: string,
+  chunkIndex: number
+): Promise<{ concepts: GeminiAnalysisResult["concepts"]; problems: Array<{ content: string; problem_type: string; difficulty: number; concepts: string[] }> }> {
   const model = getJsonModel();
 
-  const prompt = `당신은 수학 교육 전문가입니다. PDF를 분석해 아래 JSON만 반환하세요. Cue는 생성하지 마세요.
+  const prompt = `수학 교육 전문가로서 이 PDF 청크(${chunkIndex + 1}번째 구간)를 분석하세요. Cue는 생성하지 마세요.
 
 {
-  "summary": "문서 요약 1-2문장",
   "concepts": [
     { "name": "개념명", "frequency": 1~5, "is_hot": bool, "is_trap": bool, "is_key": bool }
   ],
-  "problem_types": [
-    { "type": "유형명", "count": 숫자, "concepts": ["개념"] }
-  ],
   "problems": [
     {
-      "content": "문제 내용 (수식은 텍스트로, 핵심만 간결하게)",
+      "content": "문제 내용 (수식은 텍스트로, 간결하게)",
       "problem_type": "유형",
       "difficulty": 1~5,
       "concepts": ["개념1"]
@@ -49,19 +69,19 @@ async function extractProblemsFromPDF(
 }
 
 규칙:
-- PDF의 모든 문제를 포함하세요 (생략 없이)
-- problems에는 cues 필드를 넣지 마세요
-- difficulty, frequency는 반드시 정수`;
+- 이 청크의 모든 문제를 포함 (생략 없이)
+- problems에 cues 필드 없음
+- difficulty, frequency는 정수`;
 
   const result = await model.generateContent([
-    { inlineData: { data: base64Data, mimeType } },
+    { inlineData: { data: base64Chunk, mimeType: "application/pdf" } },
     prompt,
   ]);
 
   return JSON.parse(result.response.text().trim());
 }
 
-// 2단계: 문제 하나에 대해 Cue 4개 생성
+// 문제 하나에 대해 Cue 4개 생성
 export async function generateCuesForProblem(problemContent: string): Promise<GeneratedCue[]> {
   const model = getJsonModel();
 
@@ -82,34 +102,69 @@ export async function generateCuesForProblem(problemContent: string): Promise<Ge
   return JSON.parse(result.response.text().trim()) as GeneratedCue[];
 }
 
-// 메인: 2단계로 분리 처리
-export async function analyzePDF(
-  base64Data: string,
-  mimeType: string = "application/pdf"
-): Promise<GeminiAnalysisResult> {
-  // 1단계: 개념 + 문제 목록 추출
-  const extracted = await extractProblemsFromPDF(base64Data, mimeType);
+// 메인: PDF 청크 분할 → 문제 추출 → Cue 생성
+export async function analyzePDF(base64Data: string): Promise<GeminiAnalysisResult> {
+  // 1단계: PDF를 청크로 분할
+  const chunks = await splitPDFIntoChunks(base64Data);
 
-  // 2단계: 문제별 Cue 병렬 생성 (최대 5개씩 배치)
+  // 2단계: 청크별 문제 추출 (순차 처리 — API 속도 제한 방지)
+  const allConcepts: GeminiAnalysisResult["concepts"] = [];
+  const allRawProblems: Array<{ content: string; problem_type: string; difficulty: number; concepts: string[] }> = [];
+
+  for (let i = 0; i < chunks.length; i++) {
+    const extracted = await extractProblemsFromChunk(chunks[i], i);
+    allConcepts.push(...extracted.concepts);
+    allRawProblems.push(...extracted.problems);
+  }
+
+  // 개념 중복 제거 및 빈도 합산
+  const conceptMap = new Map<string, GeminiAnalysisResult["concepts"][0]>();
+  for (const c of allConcepts) {
+    const existing = conceptMap.get(c.name);
+    if (existing) {
+      existing.frequency = Math.min(5, existing.frequency + 1);
+      existing.is_hot = existing.is_hot || c.is_hot;
+      existing.is_trap = existing.is_trap || c.is_trap;
+      existing.is_key = existing.is_key || c.is_key;
+    } else {
+      conceptMap.set(c.name, { ...c });
+    }
+  }
+
+  // 3단계: 문제별 Cue 병렬 생성 (5개씩 배치)
   const BATCH_SIZE = 5;
   const problemsWithCues: GeneratedProblem[] = [];
 
-  for (let i = 0; i < extracted.problems.length; i += BATCH_SIZE) {
-    const batch = extracted.problems.slice(i, i + BATCH_SIZE);
-
+  for (let i = 0; i < allRawProblems.length; i += BATCH_SIZE) {
+    const batch = allRawProblems.slice(i, i + BATCH_SIZE);
     const cueResults = await Promise.all(
       batch.map((p) => generateCuesForProblem(p.content))
     );
-
     batch.forEach((problem, j) => {
       problemsWithCues.push({ ...problem, cues: cueResults[j] });
     });
   }
 
+  // 문제 유형 집계
+  const typeMap = new Map<string, { count: number; concepts: Set<string> }>();
+  for (const p of allRawProblems) {
+    const existing = typeMap.get(p.problem_type);
+    if (existing) {
+      existing.count++;
+      p.concepts.forEach((c) => existing.concepts.add(c));
+    } else {
+      typeMap.set(p.problem_type, { count: 1, concepts: new Set(p.concepts) });
+    }
+  }
+
   return {
-    summary: extracted.summary,
-    concepts: extracted.concepts,
-    problem_types: extracted.problem_types,
+    summary: `총 ${chunks.length}개 구간, ${allRawProblems.length}개 문제 분석 완료`,
+    concepts: Array.from(conceptMap.values()),
+    problem_types: Array.from(typeMap.entries()).map(([type, v]) => ({
+      type,
+      count: v.count,
+      concepts: Array.from(v.concepts),
+    })),
     problems: problemsWithCues,
   };
 }
