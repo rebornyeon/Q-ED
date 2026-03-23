@@ -318,7 +318,7 @@ export default function StudySessionPage({
         setAskAnswer(data.answer);
         setAskHistory((prev) => {
           const newIdx = prev.length;
-          setAskExpanded((exp) => new Set([...exp, newIdx]));
+          setAskExpanded(new Set([newIdx]));
           return [...prev, { q, a: data.answer }];
         });
         setAskQuestion("");
@@ -818,7 +818,7 @@ export default function StudySessionPage({
         </div>{/* end LEFT COLUMN */}
 
         {/* RIGHT COLUMN — Ask AI Tutor, sticky side panel (desktop only) */}
-        <div className="hidden lg:block w-[340px] shrink-0">
+        <div className="hidden lg:block w-[420px] shrink-0">
           <div className="sticky top-16 max-h-[calc(100vh-8rem)] flex flex-col rounded-xl border border-border/60 bg-card shadow-sm overflow-hidden">
             <div className="px-4 py-3 border-b border-border/40 bg-muted/30">
               <h2 className="text-sm font-bold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
@@ -850,15 +850,15 @@ export default function StudySessionPage({
                       className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-muted/40 transition-colors"
                     >
                       {isOpen ? <ChevronUp className="h-3 w-3 text-muted-foreground shrink-0" /> : <ChevronDown className="h-3 w-3 text-muted-foreground shrink-0" />}
-                      <span className="text-[11px] font-bold text-primary shrink-0">Q{i + 1}:</span>
-                      <span className="text-xs text-foreground truncate">{item.q}</span>
+                      <span className="text-xs font-bold text-primary shrink-0">Q{i + 1}:</span>
+                      <span className="text-sm text-foreground truncate">{item.q}</span>
                     </button>
                     {isOpen && (
                       <div className="px-3 pb-3 pt-1 border-t border-border/30 space-y-2">
-                        <p className="text-xs text-foreground whitespace-pre-wrap">{item.q}</p>
+                        <p className="text-sm text-foreground whitespace-pre-wrap">{item.q}</p>
                         <div className="flex gap-2">
-                          <span className="text-[11px] font-bold text-green-600 shrink-0 mt-0.5">A:</span>
-                          <MathContent className="text-xs leading-relaxed">{item.a}</MathContent>
+                          <span className="text-xs font-bold text-green-600 shrink-0 mt-0.5">A:</span>
+                          <MathContent className="text-sm leading-relaxed">{item.a}</MathContent>
                         </div>
                       </div>
                     )}
@@ -887,7 +887,7 @@ export default function StudySessionPage({
                   onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleAsk(); } }}
                   placeholder="Ask anything..."
                   rows={1}
-                  className="flex-1 text-xs px-2.5 py-2 rounded-md border border-border bg-background focus:outline-none focus:ring-1 focus:ring-primary resize-none overflow-hidden"
+                  className="flex-1 text-sm px-2.5 py-2 rounded-md border border-border bg-background focus:outline-none focus:ring-1 focus:ring-primary resize-none overflow-hidden"
                   style={{ minHeight: "32px" }}
                   disabled={askLoading}
                 />

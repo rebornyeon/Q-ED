@@ -21,7 +21,8 @@
       "Bash(powershell.exe -ExecutionPolicy Bypass -File \"C:/Users/rebor/QED/install-node-zip.ps1\")",
       "Bash(npm install:*)",
       "Bash(export PATH=\"/c/Program Files/nodejs:/c/Users/rebor/AppData/Roaming/npm:$PATH\")",
-      "Bash(pnpm build:*)"
+      "Bash(pnpm build:*)",
+      "Bash(pnpm add:*)"
     ]
   }
 }
