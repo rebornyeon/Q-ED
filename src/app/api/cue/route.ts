@@ -56,6 +56,10 @@ export async function POST(request: NextRequest) {
   // Generate new cues with Gemini (enriched with supplementary context)
   const generatedCues = await generateCuesForProblem(problemContent, supplementaryContext);
 
+  if (generatedCues.length === 0) {
+    return NextResponse.json({ cues: [] });
+  }
+
   const { data: cues, error } = await supabase
     .from("cues")
     .insert(
@@ -70,6 +74,7 @@ export async function POST(request: NextRequest) {
     .select();
 
   if (error) {
+    console.error("Failed to save cues:", error);
     return NextResponse.json({ error: "Failed to save cues" }, { status: 500 });
   }
 
