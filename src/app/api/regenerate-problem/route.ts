@@ -114,7 +114,13 @@ Rules:
     .select()
     .single();
 
-  if (updateError) return NextResponse.json({ error: "Failed to update problem" }, { status: 500 });
+  if (updateError) {
+    console.error("[regen-problem] update error:", updateError);
+    return NextResponse.json({ error: "Failed to update problem" }, { status: 500 });
+  }
+
+  console.log("[regen-problem] updated content (first 200):", updated?.content?.slice(0, 200));
+  console.log("[regen-problem] old vs new same?", updated?.content === problem.content);
 
   // Delete stale cues so they get regenerated fresh
   await supabase.from("cues").delete().eq("problem_id", problemId);

@@ -354,6 +354,9 @@ export default function StudySessionPage({
         alert(`Regen returned empty content. Raw: ${JSON.stringify(data)}`);
         return;
       }
+      console.log("[regen] old content (first 100):", currentProblem.content.slice(0, 100));
+      console.log("[regen] new content (first 100):", data.problem.content.slice(0, 100));
+      console.log("[regen] same?", currentProblem.content === data.problem.content);
       updateProblem(currentProblem.id, data.problem);
       resetCues();
       loadCues({ ...currentProblem, ...data.problem });
