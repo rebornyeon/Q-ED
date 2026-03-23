@@ -58,9 +58,14 @@ function renderMathText(text: string): string {
   result = result.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
   result = result.replace(/\*(?!\*)(.+?)\*(?!\*)/g, "<em>$1</em>");
 
-  // 4. Numbered list items: lines starting with "1." "2." etc → styled divs
+  // 4a. Numbered list items: lines starting with "1." "2." etc → styled divs
   result = result.replace(/^(\d+)\.\s+(.+)$/gm, (_, num, content) =>
     `<div class="flex gap-2 mt-1"><span class="font-semibold shrink-0">${num}.</span><span>${content}</span></div>`
+  );
+
+  // 4b. Unordered list items: lines with optional indent then * - + → bullet divs
+  result = result.replace(/^[ \t]*[*\-+]\s+(.+)$/gm, (_, content) =>
+    `<div class="flex gap-2 mt-0.5 ml-3"><span class="shrink-0 text-muted-foreground select-none">•</span><span>${content}</span></div>`
   );
 
   // 5. Paragraph breaks (\n\n) → </p><p>, single \n → <br>

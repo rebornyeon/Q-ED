@@ -71,6 +71,7 @@ export default function StudySessionPage({
   const [generatingNoteFor, setGeneratingNoteFor] = useState<string | null>(null);
   const [generatingSimilar, setGeneratingSimilar] = useState(false);
   const [similarAdded, setSimilarAdded] = useState<number | null>(null);
+  const [regeneratingProblem, setRegeneratingProblem] = useState(false);
   const [weakConceptCounts, setWeakConceptCounts] = useState<Map<string, number>>(() => {
     if (typeof window === "undefined") return new Map();
     try {
@@ -331,6 +332,26 @@ export default function StudySessionPage({
       setSimilarAdded(data.count);
     }
     setGeneratingSimilar(false);
+  }
+
+  async function handleRegenerateProblem() {
+    if (!currentProblem || regeneratingProblem) return;
+    setRegeneratingProblem(true);
+    const res = await fetch("/api/regenerate-problem", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ problemId: currentProblem.id }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      // Update problem in store by replacing problems array
+      const updated = problems.map((p) => p.id === currentProblem.id ? { ...p, ...data.problem } : p);
+      setProblems(updated);
+      // Reload cues (old ones were deleted)
+      resetCues();
+      loadCues({ ...currentProblem, ...data.problem });
+    }
+    setRegeneratingProblem(false);
   }
 
   function handleNext() {
@@ -688,7 +709,7 @@ export default function StudySessionPage({
               <Badge variant="outline" className="text-[11px] border-0 bg-purple-500/10 text-purple-600 font-semibold">Past Exam</Badge>
             )}
           </div>
-          {/* Tried + rating history — top right */}
+          {/* Tried + rating history + regenerate — top right */}
           <div className="flex items-center gap-2 shrink-0">
             {(ratingHistory.get(currentProblem.id)?.length ?? 0) > 0 && (
               <span className="flex items-center gap-0.5">
@@ -697,6 +718,15 @@ export default function StudySessionPage({
                 ))}
               </span>
             )}
+            <button
+              onClick={handleRegenerateProblem}
+              disabled={regeneratingProblem}
+              className="flex items-center gap-1 text-[11px] text-muted-foreground/40 hover:text-muted-foreground transition-colors disabled:opacity-30"
+              title="Re-extract this problem from the PDF"
+            >
+              {regeneratingProblem ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <span className="text-sm">⟳</span>}
+              <span className="hidden sm:inline">Regen</span>
+            </button>
             <button
               onClick={() => toggleTried(currentProblem.id)}
               className={`flex items-center gap-1 text-xs font-medium transition-colors ${triedIds.has(currentProblem.id) ? "text-green-600" : "text-muted-foreground/40 hover:text-muted-foreground"}`}
