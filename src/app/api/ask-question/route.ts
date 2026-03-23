@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { problemId, question, history } = await request.json();
+  const { problemId, question, history, imageBase64, imageMimeType } = await request.json();
 
   if (!problemId || !question) {
     return NextResponse.json({ error: "problemId and question are required" }, { status: 400 });
@@ -95,7 +95,11 @@ ${cueContext}
 ${historyBlock}--- STUDENT'S NEW QUESTION ---
 ${question}`;
 
-  const result = await model.generateContent(prompt);
+  const result = await model.generateContent(
+    imageBase64 && imageMimeType
+      ? [{ inlineData: { data: imageBase64, mimeType: imageMimeType } }, prompt]
+      : prompt
+  );
   const answer = result.response.text().trim();
 
   return NextResponse.json({ answer });
