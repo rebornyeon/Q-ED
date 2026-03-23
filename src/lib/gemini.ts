@@ -285,11 +285,11 @@ Return exactly this JSON array. For multi-step content, use \\n between each ste
 
 Return exactly 5 elements. The level 0 cue must be concrete and specific to THIS problem — not generic. All text must be in English. Use actual \\n characters (not literal backslash-n) for line breaks within content strings.`;
 
-  const result = await model.generateContent(prompt);
   try {
+    const result = await model.generateContent(prompt);
     return parseGeminiJson(result.response.text()) as GeneratedCue[];
-  } catch {
-    console.warn("generateCuesForProblem JSON parse failed, returning empty cues");
+  } catch (e) {
+    console.error("generateCuesForProblem failed:", e);
     return [];
   }
 }

@@ -4,6 +4,7 @@ import { generateCuesForProblem } from "@/lib/gemini";
 import type { SupplementaryInsights } from "@/types";
 
 export async function POST(request: NextRequest) {
+  try {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -79,4 +80,8 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json({ cues });
+  } catch (e) {
+    console.error("cue route unhandled error:", e);
+    return NextResponse.json({ error: String(e) }, { status: 500 });
+  }
 }
