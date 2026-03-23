@@ -345,15 +345,20 @@ export default function StudySessionPage({
         body: JSON.stringify({ problemId: currentProblem.id }),
       });
       const data = await res.json();
+      console.log("[regen] status:", res.status, "data:", data);
       if (!res.ok) {
-        alert(`Regen failed: ${data.error ?? res.status}`);
+        alert(`Regen failed (${res.status}): ${data.error ?? "unknown error"}`);
+        return;
+      }
+      if (!data.problem?.content) {
+        alert(`Regen returned empty content. Raw: ${JSON.stringify(data)}`);
         return;
       }
       updateProblem(currentProblem.id, data.problem);
       resetCues();
       loadCues({ ...currentProblem, ...data.problem });
     } catch (e) {
-      alert(`Regen error: ${e}`);
+      alert(`Regen network error: ${e}`);
     } finally {
       setRegeneratingProblem(false);
     }
