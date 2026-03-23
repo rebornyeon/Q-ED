@@ -84,14 +84,19 @@ Rules:
     prompt,
   ]);
 
+  const rawText = result.response.text();
+  console.log("[regen-problem] raw Gemini output:", rawText.slice(0, 500));
+
   let parsed: { content: string; problem_type: string; difficulty: number; concepts: string[] };
   try {
-    parsed = parseGeminiJson(result.response.text());
-  } catch {
-    return NextResponse.json({ error: "Failed to parse Gemini response" }, { status: 500 });
+    parsed = parseGeminiJson(rawText);
+  } catch (e) {
+    console.error("[regen-problem] parse failed:", e, "raw:", rawText.slice(0, 300));
+    return NextResponse.json({ error: `Parse failed: ${e}` }, { status: 500 });
   }
 
   if (!parsed.content || parsed.content.trim().length < 20) {
+    console.error("[regen-problem] content too short:", parsed);
     return NextResponse.json({ error: "Generated content too short" }, { status: 500 });
   }
 
