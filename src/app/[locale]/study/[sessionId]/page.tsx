@@ -104,7 +104,12 @@ export default function StudySessionPage({
   const askInputRef = useRef<HTMLTextAreaElement>(null);
   const askImageInputRef = useRef<HTMLInputElement>(null);
   const cueLoadIdRef = useRef(0);
-  const indexPersistMountedRef = useRef(false);
+  // Read saved index synchronously during init (before any effect can overwrite localStorage)
+  const savedStartIndexRef = useRef(
+    typeof window !== "undefined"
+      ? (() => { try { const s = localStorage.getItem(`qed-index-${sessionId}`); return s ? parseInt(s, 10) : 0; } catch { return 0; } })()
+      : 0
+  );
 
   const currentProblem: Problem | undefined = problems[currentProblemIndex];
 
@@ -156,12 +161,9 @@ export default function StudySessionPage({
 
       if (problemsData) {
         setProblems(problemsData as Problem[]);
-        // Restore last position
-        const savedIndex = localStorage.getItem(`qed-index-${sessionId}`);
-        if (savedIndex) {
-          const idx = parseInt(savedIndex, 10);
-          if (idx > 0 && idx < problemsData.length) jumpToIndex(idx);
-        }
+        // Restore last position using index captured synchronously before effects ran
+        const idx = savedStartIndexRef.current;
+        if (idx > 0 && idx < problemsData.length) jumpToIndex(idx);
       }
       if (sessionData.document_id) setDocumentId(sessionData.document_id);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -173,9 +175,8 @@ export default function StudySessionPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
-  // Persist current problem index (skip first render to avoid overwriting saved position)
+  // Persist current problem index
   useEffect(() => {
-    if (!indexPersistMountedRef.current) { indexPersistMountedRef.current = true; return; }
     localStorage.setItem(`qed-index-${sessionId}`, String(currentProblemIndex));
   }, [currentProblemIndex, sessionId]);
 
@@ -337,18 +338,25 @@ export default function StudySessionPage({
   async function handleRegenerateProblem() {
     if (!currentProblem || regeneratingProblem) return;
     setRegeneratingProblem(true);
-    const res = await fetch("/api/regenerate-problem", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ problemId: currentProblem.id }),
-    });
-    if (res.ok) {
+    try {
+      const res = await fetch("/api/regenerate-problem", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ problemId: currentProblem.id }),
+      });
       const data = await res.json();
-      updateProblem(currentProblem.id, data.problem); // update in-place, no index reset
+      if (!res.ok) {
+        alert(`Regen failed: ${data.error ?? res.status}`);
+        return;
+      }
+      updateProblem(currentProblem.id, data.problem);
       resetCues();
       loadCues({ ...currentProblem, ...data.problem });
+    } catch (e) {
+      alert(`Regen error: ${e}`);
+    } finally {
+      setRegeneratingProblem(false);
     }
-    setRegeneratingProblem(false);
   }
 
   function handleNext() {
