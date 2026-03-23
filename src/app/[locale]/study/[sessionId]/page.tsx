@@ -936,6 +936,7 @@ export default function StudySessionPage({
             <div className="px-3 py-3 border-t border-border/40 bg-muted/20">
               {askImage && (
                 <div className="relative inline-block mb-2">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={askImage.preview} alt="upload preview" className="h-16 rounded-md border border-border object-cover" />
                   <button onClick={() => setAskImage(null)} className="absolute -top-1.5 -right-1.5 bg-background border border-border rounded-full p-0.5 hover:bg-muted">
                     <X className="h-3 w-3" />
@@ -1024,6 +1025,7 @@ export default function StudySessionPage({
 
           {askImage && (
             <div className="relative inline-block mb-2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={askImage.preview} alt="upload preview" className="h-16 rounded-md border border-border object-cover" />
               <button onClick={() => setAskImage(null)} className="absolute -top-1.5 -right-1.5 bg-background border border-border rounded-full p-0.5 hover:bg-muted">
                 <X className="h-3 w-3" />

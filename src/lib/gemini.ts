@@ -332,6 +332,7 @@ Extract what this material emphasizes for exam preparation. Keep each list conci
 }
 
 // Generate 1-2 targeted problems for a concept not covered by any extracted problem
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function generateTargetedProblems(conceptName: string): Promise<RawExtractedProblem[]> {
   const model = getJsonModel();
 
