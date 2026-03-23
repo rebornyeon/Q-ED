@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
   const model = genAI.getGenerativeModel({
     model: "gemini-2.5-flash",
-    generationConfig: { temperature: 0.4, maxOutputTokens: 2048 },
+    generationConfig: { temperature: 0.4, maxOutputTokens: 8192 },
   });
 
   const prompt = `You are a patient, expert math tutor helping a student who is studying for an exam. Answer the student's NEW question about the problem below.
@@ -69,6 +69,8 @@ export async function POST(request: NextRequest) {
 IMPORTANT GUIDELINES:
 - Answer directly and clearly — explain the concept, not just the answer
 - Use LaTeX notation for all math: inline $x^2$, display $$\\int_0^1 f(x)\\,dx$$
+- NEVER write the same expression twice (e.g. do NOT write "$T+S$ T+S" — use LaTeX only, no plain-text duplicate)
+- Wrap multi-line derivations in $$...$$, e.g. $$\\begin{align*} ... \\end{align*}$$
 - If the student asks "how do I start?", guide them with the approach, don't solve it entirely
 - If the student asks about a specific concept, explain the underlying theory with examples
 - Reference the cues provided when relevant — they represent the ideal solution path

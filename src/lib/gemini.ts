@@ -263,15 +263,15 @@ Use this context to make cues exam-targeted: highlight where this problem connec
 ${contextBlock}
 Problem: ${problemContent}
 
-Return exactly this JSON array:
+Return exactly this JSON array. For multi-step content, use \\n between each step so they display on separate lines (e.g. "Step 1: ...\nStep 2: ...\nStep 3: ..."):
 [
-  { "cue_type": "kill_shot", "cue_level": 1, "content": "Level 1: Approach strategy — how to think about this", "why_explanation": "Why this direction works" },
-  { "cue_type": "pattern",   "cue_level": 2, "content": "Level 2: Pattern guide — what structure to recognize", "why_explanation": "Why this pattern applies" },
-  { "cue_type": "speed",     "cue_level": 3, "content": "Level 3: Solution direction — concrete steps", "why_explanation": "Why this method works" },
+  { "cue_type": "kill_shot", "cue_level": 1, "content": "Level 1: Approach strategy — how to think about this problem. Use \\n to separate key points.", "why_explanation": "Why this direction works" },
+  { "cue_type": "pattern",   "cue_level": 2, "content": "Level 2: Pattern guide — what structure to recognize. Use \\n between each observation.", "why_explanation": "Why this pattern applies" },
+  { "cue_type": "speed",     "cue_level": 3, "content": "Level 3: Step-by-step solution direction. Number each step and separate with \\n:\\n1. First step\\n2. Second step\\n3. Third step", "why_explanation": "Why this method works" },
   { "cue_type": "kill_shot", "cue_level": 4, "content": "Level 4: Kill Shot — the one decisive line that ends the problem", "why_explanation": "Why this is the key move" }
 ]
 
-Return exactly 4 elements. All text must be in English.`;
+Return exactly 4 elements. All text must be in English. Use actual \\n characters (not literal backslash-n) for line breaks within content strings.`;
 
   const result = await model.generateContent(prompt);
   try {

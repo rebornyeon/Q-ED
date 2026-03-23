@@ -218,37 +218,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Failed to create problems", detail: problemsError.message }, { status: 500 });
   }
 
-  // Insert pre-generated cues for main problems
-  const cuesData = [];
-  let problemOffset = 0;
-  for (const docId of documentIds) {
-    const srcProblems = sourceProblemsByDocId.get(docId) ?? [];
-    const docFiltered = filterConcepts
-      ? srcProblems.filter((p) => p.concepts.some((c) => filterConcepts.includes(c)))
-      : srcProblems;
-
-    // Match filtered+sorted problems back to source for cue insertion
-    for (let i = 0; i < sortedMain.filter((x) => {
-      const doc = documents.find((d) => d.id === docId);
-      return doc && (x.p.section?.startsWith(`[${doc.title}]`) || !multiDoc);
-    }).length; i++) {
-      const src = docFiltered[i];
-      if (src?.cues) {
-        for (const cue of src.cues) {
-          cuesData.push({
-            problem_id: problems[problemOffset + i]?.id,
-            cue_type: cue.cue_type,
-            cue_level: cue.cue_level,
-            content: cue.content,
-            why_explanation: cue.why_explanation,
-          });
-        }
-      }
-    }
-    problemOffset += docFiltered.length;
-  }
-
-  const validCues = cuesData.filter((c) => c.problem_id);
+  // Insert pre-generated cues — match by sortedMain order (same order as problems insertion)
+  const validCues = sortedMain.flatMap(({ p }, i) => {
+    const problemId = problems[i]?.id;
+    if (!problemId || !p.cues || p.cues.length === 0) return [];
+    return p.cues.map((cue) => ({
+      problem_id: problemId,
+      cue_type: cue.cue_type,
+      cue_level: cue.cue_level,
+      content: cue.content,
+      why_explanation: cue.why_explanation,
+    }));
+  });
   if (validCues.length > 0) {
     await supabase.from("cues").insert(validCues);
   }
