@@ -151,7 +151,15 @@ export default function StudySessionPage({
         .eq("session_id", sessionId)
         .order("created_at");
 
-      if (problemsData) setProblems(problemsData as Problem[]);
+      if (problemsData) {
+        setProblems(problemsData as Problem[]);
+        // Restore last position
+        const savedIndex = localStorage.getItem(`qed-index-${sessionId}`);
+        if (savedIndex) {
+          const idx = parseInt(savedIndex, 10);
+          if (idx > 0 && idx < problemsData.length) jumpToIndex(idx);
+        }
+      }
       if (sessionData.document_id) setDocumentId(sessionData.document_id);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const docs = (sessionData as any).documents;
@@ -161,6 +169,11 @@ export default function StudySessionPage({
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
+
+  // Persist current problem index
+  useEffect(() => {
+    localStorage.setItem(`qed-index-${sessionId}`, String(currentProblemIndex));
+  }, [currentProblemIndex, sessionId]);
 
   // Reset per-problem transient state when problem changes
   useEffect(() => {
@@ -180,6 +193,15 @@ export default function StudySessionPage({
     setFeedback(null);
     setTimerSeconds(0);
     loadCues(currentProblem);
+    // Prefetch next problem's cues in background
+    const nextProblem = problems[currentProblemIndex + 1];
+    if (nextProblem) {
+      fetch("/api/cue", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ problemId: nextProblem.id, problemContent: nextProblem.content }),
+      }).catch(() => {}); // fire and forget
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentProblemIndex, currentProblem?.id]);
 

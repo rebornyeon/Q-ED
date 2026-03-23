@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { CueCard } from "./cue-card";
 import { useCueStore } from "@/stores/cue-store";
+import { MathContent } from "@/components/math-content";
 import { Lightbulb, ChevronDown } from "lucide-react";
 import type { Cue } from "@/types";
 
@@ -23,9 +24,12 @@ export function CueReveal({ cues }: CueRevealProps) {
   // Track which cue levels are manually expanded (latest is auto-expanded)
   const [manualExpanded, setManualExpanded] = useState<Set<number>>(new Set());
 
-  const visibleCues = cues.filter((c) => c.cue_level <= revealedLevel);
+  const understandingCue = cues.find((c) => c.cue_level === 0);
+  const hintCues = cues.filter((c) => c.cue_level > 0);
+
+  const visibleCues = hintCues.filter((c) => c.cue_level <= revealedLevel);
   const nextLevel = revealedLevel + 1;
-  const hasMore = nextLevel <= 4 && cues.some((c) => c.cue_level === nextLevel);
+  const hasMore = nextLevel <= 4 && hintCues.some((c) => c.cue_level === nextLevel);
 
   function toggleCueCollapse(level: number) {
     setManualExpanded((prev) => {
@@ -44,6 +48,15 @@ export function CueReveal({ cues }: CueRevealProps) {
 
   return (
     <div className="space-y-2">
+      {understandingCue && (
+        <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20 px-4 py-3 mb-4">
+          <div className="flex items-center gap-2 mb-1.5">
+            <span className="text-xs font-bold uppercase tracking-wide text-blue-600 dark:text-blue-400">Understanding the Question</span>
+          </div>
+          <MathContent className="text-sm leading-relaxed text-foreground">{understandingCue.content.replace(/^Understanding:\s*/i, "")}</MathContent>
+        </div>
+      )}
+
       {visibleCues.length === 0 && !hasMore ? (
         <div className="text-center py-6 text-muted-foreground">
           <Lightbulb className="h-8 w-8 mx-auto mb-2 opacity-15" />

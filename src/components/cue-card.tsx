@@ -7,13 +7,15 @@ import type { Cue, CueType } from "@/types";
 import { MathContent } from "@/components/math-content";
 
 const CUE_META: Record<CueType, { label: string; accent: string; bg: string }> = {
-  kill_shot: { label: "Kill Shot", accent: "border-l-orange-500", bg: "bg-orange-500/5" },
-  trap:      { label: "Trap",      accent: "border-l-red-500",    bg: "bg-red-500/5" },
-  pattern:   { label: "Pattern",   accent: "border-l-blue-500",   bg: "bg-blue-500/5" },
-  speed:     { label: "Speed",     accent: "border-l-green-500",  bg: "bg-green-500/5" },
+  understanding: { label: "Understanding", accent: "border-l-blue-500",   bg: "bg-blue-500/5" },
+  kill_shot:     { label: "Kill Shot",     accent: "border-l-orange-500", bg: "bg-orange-500/5" },
+  trap:          { label: "Trap",          accent: "border-l-red-500",    bg: "bg-red-500/5" },
+  pattern:       { label: "Pattern",       accent: "border-l-blue-500",   bg: "bg-blue-500/5" },
+  speed:         { label: "Speed",         accent: "border-l-green-500",  bg: "bg-green-500/5" },
 };
 
 const LEVEL_LABELS: Record<number, string> = {
+  0: "Understanding",
   1: "Approach",
   2: "Pattern",
   3: "Direction",

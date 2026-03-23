@@ -1,7 +1,7 @@
 export type Locale = "ko" | "en";
 
-export type CueType = "kill_shot" | "trap" | "pattern" | "speed";
-export type CueLevel = 1 | 2 | 3 | 4;
+export type CueType = "kill_shot" | "trap" | "pattern" | "speed" | "understanding";
+export type CueLevel = 0 | 1 | 2 | 3 | 4;
 
 export interface Profile {
   id: string;

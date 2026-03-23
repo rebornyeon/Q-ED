@@ -89,30 +89,70 @@ export function StudyNotesPanel({ sessionId, generatingNoteFor, onNoteGenerated 
   }
 
   function handleExport() {
-    const lines: string[] = [];
-    for (const note of [...notes].reverse()) {
-      lines.push("═══════════════════════════════════");
-      lines.push(note.title);
-      if (note.reference) lines.push(`Reference: ${note.reference}`);
-      lines.push("───────────────────────────────────");
-      // Strip LaTeX delimiters for plain text
-      const plainContent = note.content
-        .replace(/\$\$([^$]+)\$\$/g, "$1")
-        .replace(/\$([^$]+)\$/g, "$1");
-      lines.push(plainContent);
-      lines.push("");
+    const noteCards = [...notes].reverse().map((note) => {
       const userNote = userNoteDrafts[note.id] ?? note.user_note;
-      lines.push(`My Notes: ${userNote}`);
-      lines.push("");
-    }
+      const checks = (note.reference_count ?? 1) > 1
+        ? `<span style="color:#16a34a;margin-left:6px">${"✓".repeat(Math.min(note.reference_count, 5))}</span>`
+        : "";
+      return `
+        <div class="note-card">
+          <div class="note-header">
+            <span class="note-title">${note.title}${checks}</span>
+            ${note.reference ? `<span class="note-ref">${note.reference}</span>` : ""}
+          </div>
+          ${note.summary ? `<div class="note-summary">${note.summary}</div>` : ""}
+          <div class="note-content">${note.content}</div>
+          ${userNote ? `<div class="note-user"><strong>My Notes:</strong><br>${userNote.replace(/\n/g, "<br>")}</div>` : ""}
+        </div>
+      `;
+    }).join("");
 
-    const blob = new Blob([lines.join("\n")], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "study-notes.txt";
-    a.click();
-    URL.revokeObjectURL(url);
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Study Notes</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"><\/script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"><\/script>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: "Georgia", serif; max-width: 780px; margin: 0 auto; padding: 32px 24px; color: #111; }
+    h1 { font-size: 24px; font-weight: bold; margin-bottom: 24px; border-bottom: 2px solid #111; padding-bottom: 8px; }
+    .note-card { page-break-inside: avoid; margin-bottom: 28px; border: 1px solid #ddd; border-radius: 10px; padding: 20px; }
+    .note-header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+    .note-title { font-size: 16px; font-weight: bold; }
+    .note-ref { font-size: 11px; font-family: monospace; background: #f0f4ff; color: #3730a3; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+    .note-summary { font-size: 13px; color: #555; font-style: italic; margin-bottom: 10px; }
+    .note-content { font-size: 14px; line-height: 1.8; }
+    .note-user { margin-top: 14px; padding: 10px 14px; background: #eff6ff; color: #1d4ed8; border-left: 3px solid #3b82f6; border-radius: 6px; font-size: 13px; }
+    .katex-display { overflow-x: auto; }
+    @media print { body { padding: 16px; } .note-card { border-color: #ccc; } }
+  </style>
+</head>
+<body>
+  <h1>Study Notes</h1>
+  ${noteCards}
+  <script>
+    document.addEventListener("DOMContentLoaded", function() {
+      renderMathInElement(document.body, {
+        delimiters: [
+          { left: "$$", right: "$$", display: true },
+          { left: "$", right: "$", display: false }
+        ],
+        throwOnError: false
+      });
+      setTimeout(() => window.print(), 800);
+    });
+  <\/script>
+</body>
+</html>`;
+
+    const win = window.open("", "_blank");
+    if (win) {
+      win.document.write(html);
+      win.document.close();
+    }
   }
 
   const reversedNotes = [...notes].reverse();
@@ -247,7 +287,7 @@ export function StudyNotesPanel({ sessionId, generatingNoteFor, onNoteGenerated 
 
                 {/* Summary */}
                 {note.summary && (
-                  <p className="text-xs text-muted-foreground italic">{note.summary}</p>
+                  <MathContent className="text-xs text-muted-foreground italic">{note.summary}</MathContent>
                 )}
 
                 {/* Content */}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations, useLocale } from "next-intl";
 import { Navbar } from "@/components/navbar";
@@ -11,8 +11,26 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import {
   Loader2, Upload, FileText, CheckCircle2, AlertCircle,
-  Flame, AlertTriangle, Trophy, Filter, Star, X, Plus,
+  Flame, AlertTriangle, Trophy, Filter, Star, X, Plus, Clock,
 } from "lucide-react";
+
+// Estimate pages from file size (~75KB per page average)
+function estimatePages(bytes: number) { return Math.max(1, Math.round(bytes / 75000)); }
+// Estimate seconds: chunks ceil(pages/8) processed in groups of 3, ~5s per batch
+function estimateSeconds(totalBytes: number) {
+  const pages = estimatePages(totalBytes);
+  const chunks = Math.ceil(pages / 8);
+  const batches = Math.ceil(chunks / 3);
+  return Math.max(10, batches * 6);
+}
+
+const PHASES = [
+  "PDF 파일 업로드 중...",
+  "페이지 분석 중...",
+  "문제 추출 중...",
+  "개념 정리 중...",
+  "마무리 중...",
+];
 import type { Concept, SupplementaryDocument, GeminiAnalysisResult } from "@/types";
 import { SupplementaryUpload } from "@/components/supplementary-upload";
 
@@ -57,6 +75,32 @@ export default function UploadPage() {
   const [currentFileName, setCurrentFileName] = useState("");
   const [currentFileIndex, setCurrentFileIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [elapsed, setElapsed] = useState(0);
+  const [estimatedSecs, setEstimatedSecs] = useState(0);
+  const [phaseIndex, setPhaseIndex] = useState(0);
+  const startTimeRef = useRef<number>(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Real-time timer during analysis
+  useEffect(() => {
+    if (step === "analyzing") {
+      startTimeRef.current = Date.now();
+      setElapsed(0);
+      setPhaseIndex(0);
+      timerRef.current = setInterval(() => {
+        const s = Math.floor((Date.now() - startTimeRef.current) / 1000);
+        setElapsed(s);
+        // Advance phase every ~20% of estimated time
+        const ratio = estimatedSecs > 0 ? s / estimatedSecs : 0;
+        setPhaseIndex(Math.min(PHASES.length - 1, Math.floor(ratio * PHASES.length)));
+        setProgress(Math.min(92, Math.round(ratio * 92)));
+      }, 500);
+    } else {
+      if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+      if (step === "done") { setProgress(100); }
+    }
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [step, estimatedSecs]);
 
   // Results state
   const [fileResults, setFileResults] = useState<FileResult[]>([]);
@@ -94,6 +138,8 @@ export default function UploadPage() {
   // ── Analysis ─────────────────────────────────────────────────────
   async function handleUpload() {
     if (fileEntries.length === 0) return;
+    const totalBytes = fileEntries.reduce((s, e) => s + e.file.size, 0);
+    setEstimatedSecs(estimateSeconds(totalBytes) * fileEntries.length);
     setStep("analyzing");
     setError(null);
     const results: FileResult[] = [];
@@ -229,9 +275,15 @@ export default function UploadPage() {
                         className="h-7 text-sm"
                       />
                     </div>
-                    <Badge variant="secondary" className="shrink-0 text-xs">
-                      {(entry.file.size / 1024 / 1024).toFixed(1)} MB
-                    </Badge>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <Badge variant="secondary" className="text-xs">
+                        {(entry.file.size / 1024 / 1024).toFixed(1)} MB
+                      </Badge>
+                      <Badge variant="outline" className="text-xs text-muted-foreground gap-1">
+                        <Clock className="h-2.5 w-2.5" />
+                        ~{estimateSeconds(entry.file.size)}초
+                      </Badge>
+                    </div>
                     <button onClick={() => removeEntry(entry.id)} className="text-muted-foreground hover:text-destructive shrink-0">
                       <X className="h-4 w-4" />
                     </button>
@@ -268,15 +320,29 @@ export default function UploadPage() {
         {/* ── ANALYZING ── */}
         {step === "analyzing" && (
           <Card>
-            <CardContent className="pt-8 pb-8 text-center space-y-6">
+            <CardContent className="pt-8 pb-8 text-center space-y-5">
               <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto" />
               <div>
                 <p className="font-bold text-lg">{t("analyzing")}</p>
                 <p className="text-sm text-muted-foreground mt-1">
-                  {currentFileIndex}/{fileEntries.length} — {currentFileName}
+                  {fileEntries.length > 1 ? `${currentFileIndex}/${fileEntries.length} — ${currentFileName}` : currentFileName || fileEntries[0]?.file.name}
                 </p>
               </div>
-              <Progress value={progress} className="max-w-sm mx-auto" />
+              <Progress value={progress} className="max-w-sm mx-auto h-2" />
+              {/* Phase + timer */}
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-primary animate-pulse">{PHASES[phaseIndex]}</p>
+                <div className="flex items-center justify-center gap-3 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    경과: {elapsed}초
+                  </span>
+                  <span>·</span>
+                  <span>
+                    예상: ~{Math.max(0, estimatedSecs - elapsed)}초 남음
+                  </span>
+                </div>
+              </div>
             </CardContent>
           </Card>
         )}

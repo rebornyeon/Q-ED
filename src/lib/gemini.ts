@@ -4,7 +4,8 @@ import type { GeminiAnalysisResult, GeneratedCue, GeneratedProblem, Supplementar
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
-const PAGES_PER_CHUNK = 5; // 한 번에 처리할 페이지 수
+const PAGES_PER_CHUNK = 8; // 한 번에 처리할 페이지 수
+const CHUNK_CONCURRENCY = 3; // 병렬 처리할 청크 수
 
 // Robustly parse JSON from a Gemini response.
 // Handles: markdown code fences, unescaped LaTeX backslashes, leading/trailing whitespace.
@@ -158,7 +159,11 @@ Rules:
 - difficulty/frequency are integers 1-5.
 - section: exact chapter or section heading from the PDF.
 - page: PDF page number (integer), null if unknown.
-- problem_number: the label as printed (e.g. "3.2a", "Problem 5"), null if none.`;
+- problem_number: the label as printed (e.g. "3.2a", "Problem 5"), null if none.
+- CRITICAL: Every problem MUST have a clear instruction telling the student what to do. Include the FULL instruction: "Prove that...", "Find...", "Show that...", "Determine...", "Let X be... Prove that Y", "Compute...", "Verify that...", etc.
+- For theorem/definition-based problems: DO NOT just copy the theorem. Write it as a task: "Prove that [theorem statement]" or "Show that [the following holds]: [statement]"
+- For computation problems: Always end with "Find [what to compute]" or "Compute [expression]"
+- A problem is INVALID if a student cannot tell what they need to do from the content alone.`;
 
   for (let attempt = 0; attempt < 3; attempt++) {
     const result = await model.generateContent([
@@ -259,19 +264,20 @@ export async function generateCuesForProblem(
 Use this context to make cues exam-targeted: highlight where this problem connects to the above patterns and tips.\n`
     : "";
 
-  const prompt = `You are a math education expert. Generate 4 step-by-step Cues for this problem in English.
+  const prompt = `You are a math education expert. Generate 5 step-by-step Cues for this problem in English.
 ${contextBlock}
 Problem: ${problemContent}
 
 Return exactly this JSON array. For multi-step content, use \\n between each step so they display on separate lines (e.g. "Step 1: ...\nStep 2: ...\nStep 3: ..."):
 [
+  { "cue_type": "understanding", "cue_level": 0, "content": "Understanding: [Precisely what this problem is asking you to do. Break down: (1) What is given/known, (2) What you need to find/prove/compute, (3) Any key constraints or conditions]", "why_explanation": "Understanding the question precisely before attempting it prevents wasted effort on the wrong goal." },
   { "cue_type": "kill_shot", "cue_level": 1, "content": "Level 1: Approach strategy — how to think about this problem. Use \\n to separate key points.", "why_explanation": "Why this direction works" },
   { "cue_type": "pattern",   "cue_level": 2, "content": "Level 2: Pattern guide — what structure to recognize. Use \\n between each observation.", "why_explanation": "Why this pattern applies" },
   { "cue_type": "speed",     "cue_level": 3, "content": "Level 3: Step-by-step solution direction. Number each step and separate with \\n:\\n1. First step\\n2. Second step\\n3. Third step", "why_explanation": "Why this method works" },
   { "cue_type": "kill_shot", "cue_level": 4, "content": "Level 4: Kill Shot — the one decisive line that ends the problem", "why_explanation": "Why this is the key move" }
 ]
 
-Return exactly 4 elements. All text must be in English. Use actual \\n characters (not literal backslash-n) for line breaks within content strings.`;
+Return exactly 5 elements. The level 0 cue must be concrete and specific to THIS problem — not generic. All text must be in English. Use actual \\n characters (not literal backslash-n) for line breaks within content strings.`;
 
   const result = await model.generateContent(prompt);
   try {
@@ -350,19 +356,34 @@ Rules: problems must be fully self-contained — a student must be able to solve
   return [];
 }
 
-// 메인: PDF 청크 분할 → 문제 추출 → Cue 생성
+// 청크 배열을 최대 concurrency개씩 병렬 처리
+async function processChunksParallel(
+  chunks: string[],
+  concurrency: number
+): Promise<{ concepts: GeminiAnalysisResult["concepts"]; problems: RawExtractedProblem[] }[]> {
+  const results: { concepts: GeminiAnalysisResult["concepts"]; problems: RawExtractedProblem[] }[] = [];
+  for (let i = 0; i < chunks.length; i += concurrency) {
+    const batch = chunks.slice(i, i + concurrency);
+    const batchResults = await Promise.all(
+      batch.map((chunk, j) => extractProblemsFromChunk(chunk, i + j))
+    );
+    results.push(...batchResults);
+  }
+  return results;
+}
+
+// 메인: PDF 청크 분할 → 문제 추출 (Cue는 on-demand 생성으로 이동)
 export async function analyzePDF(base64Data: string): Promise<GeminiAnalysisResult> {
   // 1단계: PDF를 청크로 분할
   const chunks = await splitPDFIntoChunks(base64Data);
 
-  // 2단계: 청크별 문제 추출 (순차 처리 — API 속도 제한 방지)
+  // 2단계: 청크 병렬 처리 (최대 CHUNK_CONCURRENCY개 동시)
+  const chunkResults = await processChunksParallel(chunks, CHUNK_CONCURRENCY);
   const allConcepts: GeminiAnalysisResult["concepts"] = [];
   const allRawProblems: RawExtractedProblem[] = [];
-
-  for (let i = 0; i < chunks.length; i++) {
-    const extracted = await extractProblemsFromChunk(chunks[i], i);
-    allConcepts.push(...extracted.concepts);
-    allRawProblems.push(...extracted.problems);
+  for (const r of chunkResults) {
+    allConcepts.push(...r.concepts);
+    allRawProblems.push(...r.problems);
   }
 
   // 개념 중복 제거 및 빈도 합산
@@ -379,45 +400,6 @@ export async function analyzePDF(base64Data: string): Promise<GeminiAnalysisResu
     }
   }
 
-  // 2.5단계: 커버리지 검사 — 중요 개념 중 문제 수가 부족한 것에 대해 보충 문제 생성
-  // is_hot/is_key: 최소 2문제, is_trap/frequency≥4: 최소 1문제
-  const conceptCoverage = new Map<string, number>();
-  for (const p of allRawProblems) {
-    for (const c of p.concepts) {
-      const key = c.toLowerCase();
-      conceptCoverage.set(key, (conceptCoverage.get(key) ?? 0) + 1);
-    }
-  }
-  const uncoveredImportant = Array.from(conceptMap.values()).filter((c) => {
-    const count = conceptCoverage.get(c.name.toLowerCase()) ?? 0;
-    const minRequired = (c.is_hot || c.is_key) ? 2 : 1;
-    return (c.is_hot || c.is_key || c.is_trap || c.frequency >= 4) && count < minRequired;
-  });
-
-  if (uncoveredImportant.length > 0) {
-    console.log(`Coverage gap: generating targeted problems for ${uncoveredImportant.length} uncovered concept(s): ${uncoveredImportant.map((c) => c.name).join(", ")}`);
-    // Cap at 8 to avoid runaway API usage
-    const toFill = uncoveredImportant.slice(0, 8);
-    for (const concept of toFill) {
-      const targeted = await generateTargetedProblems(concept.name);
-      allRawProblems.push(...targeted);
-    }
-  }
-
-  // 3단계: 문제별 Cue 병렬 생성 (5개씩 배치)
-  const BATCH_SIZE = 5;
-  const problemsWithCues: GeneratedProblem[] = [];
-
-  for (let i = 0; i < allRawProblems.length; i += BATCH_SIZE) {
-    const batch = allRawProblems.slice(i, i + BATCH_SIZE);
-    const cueResults = await Promise.all(
-      batch.map((p) => generateCuesForProblem(p.content))
-    );
-    batch.forEach((problem, j) => {
-      problemsWithCues.push({ ...problem, cues: cueResults[j] });
-    });
-  }
-
   // 문제 유형 집계
   const typeMap = new Map<string, { count: number; concepts: Set<string> }>();
   for (const p of allRawProblems) {
@@ -430,6 +412,9 @@ export async function analyzePDF(base64Data: string): Promise<GeminiAnalysisResu
     }
   }
 
+  // Cue 생성 제거 — 문제 열 때 on-demand로 생성 (훨씬 빠름)
+  const problems: GeneratedProblem[] = allRawProblems.map((p) => ({ ...p, cues: [] }));
+
   return {
     summary: `총 ${chunks.length}개 구간, ${allRawProblems.length}개 문제 분석 완료`,
     concepts: Array.from(conceptMap.values()),
@@ -438,7 +423,7 @@ export async function analyzePDF(base64Data: string): Promise<GeminiAnalysisResu
       count: v.count,
       concepts: Array.from(v.concepts),
     })),
-    problems: problemsWithCues,
+    problems,
   };
 }
 
