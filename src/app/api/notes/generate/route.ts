@@ -57,7 +57,8 @@ export async function POST(request: NextRequest) {
 
   // Call Gemini 2.5 Flash with PDF inline
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+  // @ts-expect-error thinkingConfig not yet in SDK types
+  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash", generationConfig: { thinkingConfig: { thinkingBudget: 0 } } });
 
   const conceptsStr = Array.isArray(problem.concepts) ? problem.concepts.join(", ") : "";
   const sectionStr = problem.section ? `\nSection: ${problem.section}` : "";

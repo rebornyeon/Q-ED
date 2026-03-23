@@ -50,7 +50,8 @@ export async function POST(request: NextRequest) {
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
   const model = genAI.getGenerativeModel({
     model: "gemini-2.5-flash",
-    generationConfig: { responseMimeType: "application/json", temperature: 0.2, maxOutputTokens: 8192 },
+    // @ts-expect-error thinkingConfig not yet in SDK types
+    generationConfig: { responseMimeType: "application/json", temperature: 0.2, maxOutputTokens: 8192, thinkingConfig: { thinkingBudget: 0 } },
   });
 
   const sectionHint = problem.section ? `Focus on section: "${problem.section}".` : "";

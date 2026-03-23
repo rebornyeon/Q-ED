@@ -96,6 +96,8 @@ function getJsonModel() {
       responseMimeType: "application/json",
       temperature: 0.3,
       maxOutputTokens: 65536,
+      // @ts-expect-error thinkingConfig is supported but not yet in type defs
+      thinkingConfig: { thinkingBudget: 0 },
     },
   });
 }
@@ -103,7 +105,11 @@ function getJsonModel() {
 function getTextModel() {
   return genAI.getGenerativeModel({
     model: "gemini-2.5-flash",
-    generationConfig: { temperature: 0.5 },
+    generationConfig: {
+      temperature: 0.5,
+      // @ts-expect-error thinkingConfig is supported but not yet in type defs
+      thinkingConfig: { thinkingBudget: 0 },
+    },
   });
 }
 
