@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { PDFDocument } from "pdf-lib";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { parseGeminiJson } from "@/lib/gemini";
 
 export const maxDuration = 120;
 
@@ -84,14 +83,16 @@ Rules:
     prompt,
   ]);
 
-  const rawText = result.response.text();
-  console.log("[regen-problem] raw Gemini output:", rawText.slice(0, 500));
+  const rawText = result.response.text().trim();
 
   let parsed: { content: string; problem_type: string; difficulty: number; concepts: string[] };
   try {
-    parsed = parseGeminiJson(rawText);
+    // responseMimeType: "application/json" guarantees valid JSON — use JSON.parse directly
+    // (parseGeminiJson's fixBackslashesInJsonStrings would corrupt already-escaped JSON)
+    const jsonText = rawText.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "").trim();
+    parsed = JSON.parse(jsonText);
   } catch (e) {
-    console.error("[regen-problem] parse failed:", e, "raw:", rawText.slice(0, 300));
+    console.error("[regen-problem] parse failed:", e, "\nraw:", rawText.slice(0, 400));
     return NextResponse.json({ error: `Parse failed: ${e}` }, { status: 500 });
   }
 
