@@ -54,8 +54,9 @@ function renderMathText(text: string): string {
   // 1. Protect display math blocks ($$...$$) and \begin{...}...\end{...} from other processing
   const displayBlocks: string[] = [];
 
-  // Wrap bare \begin{align*}...\end{align*} (and similar) in $$ if not already wrapped
-  result = result.replace(/(\$\$[\s\S]*?\$\$|\\\w+\{[^}]*\}[\s\S]*?\\end\{[^}]*\})/g, (match) => {
+  // Wrap bare \begin{env}...\end{env} in $$ if not already wrapped
+  // Back-reference \1 ensures we find the correct matching \end{envname}, not a nested closer
+  result = result.replace(/\$\$[\s\S]*?\$\$|\\begin\{([^}]+)\}[\s\S]*?\\end\{\1\}/g, (match) => {
     if (match.startsWith("$$")) return match; // already wrapped
     return `$$${match}$$`;
   });
