@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { PDFDocument } from "pdf-lib";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { parseGeminiJson } from "@/lib/gemini";
 
 export const maxDuration = 120;
 
@@ -85,8 +86,7 @@ Rules:
 
   let parsed: { content: string; problem_type: string; difficulty: number; concepts: string[] };
   try {
-    const raw = result.response.text().trim().replace(/^```json\s*/i, "").replace(/```\s*$/i, "").trim();
-    parsed = JSON.parse(raw);
+    parsed = parseGeminiJson(result.response.text());
   } catch {
     return NextResponse.json({ error: "Failed to parse Gemini response" }, { status: 500 });
   }

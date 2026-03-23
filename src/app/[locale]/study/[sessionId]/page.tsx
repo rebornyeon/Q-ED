@@ -38,7 +38,7 @@ export default function StudySessionPage({
   const router = useRouter();
   const supabase = createClient();
 
-  const { problems, currentProblemIndex, nextProblem, prevProblem, setProblems, appendProblems, jumpToIndex } = useStudyStore();
+  const { problems, currentProblemIndex, nextProblem, prevProblem, setProblems, updateProblem, appendProblems, jumpToIndex } = useStudyStore();
 
   const [generatedIds, setGeneratedIds] = useState<Set<string>>(() => {
     if (typeof window === "undefined") return new Set();
@@ -344,10 +344,7 @@ export default function StudySessionPage({
     });
     if (res.ok) {
       const data = await res.json();
-      // Update problem in store by replacing problems array
-      const updated = problems.map((p) => p.id === currentProblem.id ? { ...p, ...data.problem } : p);
-      setProblems(updated);
-      // Reload cues (old ones were deleted)
+      updateProblem(currentProblem.id, data.problem); // update in-place, no index reset
       resetCues();
       loadCues({ ...currentProblem, ...data.problem });
     }

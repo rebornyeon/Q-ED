@@ -12,6 +12,7 @@ interface StudyState {
 
   setSession: (session: StudySession) => void;
   setProblems: (problems: Problem[]) => void;
+  updateProblem: (id: string, data: Partial<Problem>) => void;
   appendProblems: (problems: Problem[]) => void;
   reinsertProblem: (fromIndex: number, afterOffset: number) => void;
   nextProblem: () => void;
@@ -35,6 +36,10 @@ export const useStudyStore = create<StudyState>((set) => ({
 
   setSession: (session) => set({ currentSession: session }),
   setProblems: (problems) => set({ problems, currentProblemIndex: 0 }),
+  updateProblem: (id, data) =>
+    set((state) => ({
+      problems: state.problems.map((p) => p.id === id ? { ...p, ...data } : p),
+    })),
   appendProblems: (newProblems) =>
     set((state) => ({
       problems: [...state.problems, ...newProblems],

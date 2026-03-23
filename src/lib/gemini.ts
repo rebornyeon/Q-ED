@@ -9,7 +9,7 @@ const CHUNK_CONCURRENCY = 3; // 병렬 처리할 청크 수
 
 // Robustly parse JSON from a Gemini response.
 // Handles: markdown code fences, unescaped LaTeX backslashes, leading/trailing whitespace.
-function parseGeminiJson<T>(raw: string): T {
+export function parseGeminiJson<T>(raw: string): T {
   let text = raw.trim();
 
   // Strip ```json ... ``` or ``` ... ``` fences if present
