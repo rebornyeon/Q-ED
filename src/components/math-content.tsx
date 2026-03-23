@@ -22,11 +22,10 @@ export function MathContent({ children, className = "" }: Props) {
 
 // Fix common LLM-generated LaTeX issues before passing to KaTeX
 function fixLatexBackslashes(tex: string): string {
-  // 1. Single \ before space/newline → \\ (matrix row separator stored incorrectly by LLMs)
-  //    Negative lookbehind ensures already-correct \\ isn't double-processed
+  // Single \ before space/newline → \\ (matrix row separator stored incorrectly by LLMs)
   tex = tex.replace(/(?<!\\)\\ /g, '\\\\ ');
   tex = tex.replace(/(?<!\\)\\\n/g, '\\\\\n');
-  // 2. \left{ → \left\{  and  \right} → \right\{  (missing brace escape)
+  // \left{ → \left\{  and  \right} → \right\}
   tex = tex.replace(/\\left\{/g, '\\left\\{');
   tex = tex.replace(/\\right\}/g, '\\right\\}');
   return tex;
@@ -34,7 +33,6 @@ function fixLatexBackslashes(tex: string): string {
 
 function renderMathText(text: string): string {
   // 0. Normalize literal \n (backslash+n stored from JSON encoding) → actual newline
-  //    Only when NOT followed by lowercase (which could be a LaTeX command like \nabla, \ne)
   let result = text.replace(/\\n(?![a-z])/g, '\n');
 
   // 0.5. Convert LaTeX list environments to HTML (KaTeX doesn't support enumerate/itemize)
@@ -51,17 +49,9 @@ function renderMathText(text: string): string {
     ).join('');
   });
 
-  // 1. Protect display math blocks ($$...$$) and \begin{...}...\end{...} from other processing
   const displayBlocks: string[] = [];
 
-  // Wrap bare \begin{env}...\end{env} in $$ if not already wrapped
-  // Back-reference \1 ensures we find the correct matching \end{envname}, not a nested closer
-  result = result.replace(/\$\$[\s\S]*?\$\$|\\begin\{([^}]+)\}[\s\S]*?\\end\{\1\}/g, (match) => {
-    if (match.startsWith("$$")) return match; // already wrapped
-    return `$$${match}$$`;
-  });
-
-  // Extract display math $$...$$ into placeholders
+  // 1a. Extract existing $$...$$ display blocks first
   result = result.replace(/\$\$([\s\S]+?)\$\$/g, (_match, tex) => {
     const idx = displayBlocks.length;
     try {
@@ -72,10 +62,33 @@ function renderMathText(text: string): string {
     return `\x00DISPLAY${idx}\x00`;
   });
 
-  // 2. Process inline math $...$ (but not $$)
-  result = result.replace(/(?<!\$)\$(?!\$)(.+?)(?<!\$)\$(?!\$)/g, (_match, tex) => {
+  // 1b. Extract $...$ inline blocks into placeholders BEFORE display env detection.
+  //     This protects \begin{pmatrix} inside $...$ from being wrapped as a display block.
+  const inlineQueue: string[] = [];
+  result = result.replace(/(?<!\$)\$(?!\$)([\s\S]+?)(?<!\$)\$(?!\$)/g, (_match, tex) => {
+    const idx = inlineQueue.length;
+    inlineQueue.push(tex);
+    return `\x00INLINE${idx}\x00`;
+  });
+
+  // 1c. Detect bare \begin{env}...\end{env} in remaining text and render as display blocks.
+  //     Back-reference \1 ensures \begin{equation*} only closes on \end{equation*},
+  //     correctly handling nested \begin{pmatrix}...\end{pmatrix} inside.
+  result = result.replace(/\\begin\{([^}]+)\}[\s\S]*?\\end\{\1\}/g, (match) => {
+    const idx = displayBlocks.length;
     try {
-      return katex.renderToString(tex.trim(), { displayMode: false, throwOnError: false });
+      displayBlocks.push(katex.renderToString(fixLatexBackslashes(match.trim()), { displayMode: true, throwOnError: false }));
+    } catch {
+      displayBlocks.push(`<span class="text-destructive">${escapeHtml(match)}</span>`);
+    }
+    return `\x00DISPLAY${idx}\x00`;
+  });
+
+  // 2. Render inline math from queue
+  result = result.replace(/\x00INLINE(\d+)\x00/g, (_, idx) => {
+    const tex = inlineQueue[Number(idx)];
+    try {
+      return katex.renderToString(fixLatexBackslashes(tex.trim()), { displayMode: false, throwOnError: false });
     } catch {
       return `<span class="text-destructive">${escapeHtml(tex)}</span>`;
     }
