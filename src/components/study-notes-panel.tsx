@@ -148,11 +148,17 @@ export function StudyNotesPanel({ sessionId, generatingNoteFor, onNoteGenerated 
 </body>
 </html>`;
 
-    const win = window.open("", "_blank");
-    if (win) {
-      win.document.write(html);
-      win.document.close();
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    const blobUrl = URL.createObjectURL(blob);
+    const win = window.open(blobUrl, "_blank");
+    if (!win) {
+      // Fallback: download HTML file if popup blocked
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = "study-notes.html";
+      a.click();
     }
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
   }
 
   const reversedNotes = [...notes].reverse();
