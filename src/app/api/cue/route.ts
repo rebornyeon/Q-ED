@@ -11,21 +11,26 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { problemId, problemContent } = await request.json();
+  const { problemId, problemContent, regenerate } = await request.json();
 
   if (!problemId || !problemContent) {
     return NextResponse.json({ error: "problemId and problemContent are required" }, { status: 400 });
   }
 
-  // Check existing cues
-  const { data: existingCues } = await supabase
-    .from("cues")
-    .select("*")
-    .eq("problem_id", problemId)
-    .order("cue_level");
+  // Delete existing cues if regenerating
+  if (regenerate) {
+    await supabase.from("cues").delete().eq("problem_id", problemId);
+  } else {
+    // Check existing cues
+    const { data: existingCues } = await supabase
+      .from("cues")
+      .select("*")
+      .eq("problem_id", problemId)
+      .order("cue_level");
 
-  if (existingCues && existingCues.length > 0) {
-    return NextResponse.json({ cues: existingCues });
+    if (existingCues && existingCues.length > 0) {
+      return NextResponse.json({ cues: existingCues });
+    }
   }
 
   // Get document_id from problem to fetch supplementary context

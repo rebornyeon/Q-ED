@@ -102,6 +102,8 @@ export default function StudySessionPage({
   const [askImage, setAskImage] = useState<{ base64: string; mimeType: string; preview: string } | null>(null);
   const askInputRef = useRef<HTMLTextAreaElement>(null);
   const askImageInputRef = useRef<HTMLInputElement>(null);
+  const cueLoadIdRef = useRef(0);
+  const indexPersistMountedRef = useRef(false);
 
   const currentProblem: Problem | undefined = problems[currentProblemIndex];
 
@@ -170,8 +172,9 @@ export default function StudySessionPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
-  // Persist current problem index
+  // Persist current problem index (skip first render to avoid overwriting saved position)
   useEffect(() => {
+    if (!indexPersistMountedRef.current) { indexPersistMountedRef.current = true; return; }
     localStorage.setItem(`qed-index-${sessionId}`, String(currentProblemIndex));
   }, [currentProblemIndex, sessionId]);
 
@@ -205,13 +208,15 @@ export default function StudySessionPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentProblemIndex, currentProblem?.id]);
 
-  async function loadCues(problem: Problem) {
+  async function loadCues(problem: Problem, regenerate = false) {
+    const loadId = ++cueLoadIdRef.current;
     setLoadingCues(true);
     const res = await fetch("/api/cue", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ problemId: problem.id, problemContent: problem.content }),
+      body: JSON.stringify({ problemId: problem.id, problemContent: problem.content, regenerate }),
     });
+    if (cueLoadIdRef.current !== loadId) return; // stale — a newer load started, discard
     if (res.ok) {
       const data = await res.json();
       setCues(data.cues as Cue[]);
@@ -365,6 +370,7 @@ export default function StudySessionPage({
           history: askHistory,
           imageBase64: imgSnapshot?.base64 ?? null,
           imageMimeType: imgSnapshot?.mimeType ?? null,
+          clientCues: cues.length > 0 ? cues : undefined,
         }),
       });
       if (res.ok) {
@@ -752,12 +758,7 @@ export default function StudySessionPage({
               {loadingCues && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
               {!loadingCues && currentProblem && (
                 <button
-                  onClick={async () => {
-                    const { createClient } = await import("@/lib/supabase/client");
-                    const sb = createClient();
-                    await sb.from("cues").delete().eq("problem_id", currentProblem.id);
-                    await loadCues(currentProblem);
-                  }}
+                  onClick={() => { resetCues(); loadCues(currentProblem, true); }}
                   className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
                 >
                   Regenerate
@@ -917,7 +918,15 @@ export default function StudySessionPage({
                         <p className="text-sm text-foreground whitespace-pre-wrap">{item.q}</p>
                         <div className="flex gap-2">
                           <span className="text-xs font-bold text-green-600 shrink-0 mt-0.5">A:</span>
-                          <MathContent className="text-sm leading-relaxed">{item.a}</MathContent>
+                          <div className="flex-1 min-w-0">
+                            <MathContent className="text-sm leading-relaxed select-text">{item.a}</MathContent>
+                            <button
+                              onClick={() => navigator.clipboard.writeText(item.a)}
+                              className="mt-1.5 text-[10px] text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+                            >
+                              Copy answer
+                            </button>
+                          </div>
                         </div>
                       </div>
                     )}

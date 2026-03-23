@@ -54,12 +54,18 @@ function fixBackslashesInJsonStrings(text: string): string {
           i += 6;
         } else if (next !== undefined && ambiguous.has(next)) {
           // Could be JSON escape (\n, \t) OR LaTeX (\nabla, \theta, \beta, \frac, \rho)
-          // Heuristic: if followed by another letter, it's LaTeX
           const afterNext = text[i + 2];
           if (afterNext !== undefined && /[a-zA-Z]/.test(afterNext)) {
-            // LaTeX command like \beta, \frac, \nabla — double the backslash
-            result += "\\\\";
-            i++;
+            // \n followed by uppercase letter → JSON newline before new sentence (e.g. "\nStep 2:")
+            // \n followed by lowercase → possible LaTeX command (\nabla, \ne, \nu)
+            if (next === 'n' && /[A-Z0-9]/.test(afterNext)) {
+              result += ch + next; // treat as JSON \n
+              i += 2;
+            } else {
+              // LaTeX command like \beta, \frac, \nabla, \theta — double the backslash
+              result += "\\\\";
+              i++;
+            }
           } else {
             // Actual JSON escape like \n or \t at end of word
             result += ch + next;

@@ -21,9 +21,12 @@ export function MathContent({ children, className = "" }: Props) {
 }
 
 function renderMathText(text: string): string {
+  // 0. Normalize literal \n (backslash+n stored from JSON encoding) → actual newline
+  //    Only when NOT followed by lowercase (which could be a LaTeX command like \nabla, \ne)
+  let result = text.replace(/\\n(?![a-z])/g, '\n');
+
   // 1. Protect display math blocks ($$...$$) and \begin{...}...\end{...} from other processing
   const displayBlocks: string[] = [];
-  let result = text;
 
   // Wrap bare \begin{align*}...\end{align*} (and similar) in $$ if not already wrapped
   result = result.replace(/(\$\$[\s\S]*?\$\$|\\\w+\{[^}]*\}[\s\S]*?\\end\{[^}]*\})/g, (match) => {

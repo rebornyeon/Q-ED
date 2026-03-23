@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { problemId, question, history, imageBase64, imageMimeType } = await request.json();
+  const { problemId, question, history, imageBase64, imageMimeType, clientCues } = await request.json();
 
   if (!problemId || !question) {
     return NextResponse.json({ error: "problemId and question are required" }, { status: 400 });
@@ -35,9 +35,10 @@ export async function POST(request: NextRequest) {
     .eq("problem_id", problemId)
     .order("cue_level");
 
-  // Build cue context
-  const cueContext = cues && cues.length > 0
-    ? cues.map((c) => `Level ${c.cue_level} (${c.cue_type}): ${c.content}\nWhy: ${c.why_explanation}`).join("\n\n")
+  // Build cue context — prefer DB cues, fall back to client-provided cues
+  const cueSource = (cues && cues.length > 0) ? cues : (clientCues ?? []);
+  const cueContext = cueSource.length > 0
+    ? cueSource.map((c: { cue_level: number; cue_type: string; content: string; why_explanation: string }) => `Level ${c.cue_level} (${c.cue_type}): ${c.content}\nWhy: ${c.why_explanation}`).join("\n\n")
     : "No cues available yet.";
 
   // Fetch document title if available
