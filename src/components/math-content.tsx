@@ -20,10 +20,36 @@ export function MathContent({ children, className = "" }: Props) {
   );
 }
 
+// Fix common LLM-generated LaTeX issues before passing to KaTeX
+function fixLatexBackslashes(tex: string): string {
+  // 1. Single \ before space/newline → \\ (matrix row separator stored incorrectly by LLMs)
+  //    Negative lookbehind ensures already-correct \\ isn't double-processed
+  tex = tex.replace(/(?<!\\)\\ /g, '\\\\ ');
+  tex = tex.replace(/(?<!\\)\\\n/g, '\\\\\n');
+  // 2. \left{ → \left\{  and  \right} → \right\{  (missing brace escape)
+  tex = tex.replace(/\\left\{/g, '\\left\\{');
+  tex = tex.replace(/\\right\}/g, '\\right\\}');
+  return tex;
+}
+
 function renderMathText(text: string): string {
   // 0. Normalize literal \n (backslash+n stored from JSON encoding) → actual newline
   //    Only when NOT followed by lowercase (which could be a LaTeX command like \nabla, \ne)
   let result = text.replace(/\\n(?![a-z])/g, '\n');
+
+  // 0.5. Convert LaTeX list environments to HTML (KaTeX doesn't support enumerate/itemize)
+  result = result.replace(/\\begin\{enumerate\}([\s\S]*?)\\end\{enumerate\}/g, (_, items) => {
+    const parts = items.split(/\\item\b/).filter((s: string) => s.trim());
+    return parts.map((item: string, i: number) =>
+      `<div class="flex gap-2 mt-1"><span class="font-semibold shrink-0">${i + 1}.</span><span>${item.trim()}</span></div>`
+    ).join('');
+  });
+  result = result.replace(/\\begin\{itemize\}([\s\S]*?)\\end\{itemize\}/g, (_, items) => {
+    const parts = items.split(/\\item\b/).filter((s: string) => s.trim());
+    return parts.map((item: string) =>
+      `<div class="flex gap-2 mt-0.5 ml-3"><span class="shrink-0 text-muted-foreground select-none">•</span><span>${item.trim()}</span></div>`
+    ).join('');
+  });
 
   // 1. Protect display math blocks ($$...$$) and \begin{...}...\end{...} from other processing
   const displayBlocks: string[] = [];
@@ -38,7 +64,7 @@ function renderMathText(text: string): string {
   result = result.replace(/\$\$([\s\S]+?)\$\$/g, (_match, tex) => {
     const idx = displayBlocks.length;
     try {
-      displayBlocks.push(katex.renderToString(tex.trim(), { displayMode: true, throwOnError: false }));
+      displayBlocks.push(katex.renderToString(fixLatexBackslashes(tex.trim()), { displayMode: true, throwOnError: false }));
     } catch {
       displayBlocks.push(`<span class="text-destructive">${escapeHtml(tex)}</span>`);
     }
