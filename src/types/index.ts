@@ -152,3 +152,18 @@ export interface GeneratedCue {
   content: string;
   why_explanation: string;
 }
+
+export interface StudyNote {
+  id: string;
+  session_id: string;
+  problem_id: string | null;
+  user_id: string;
+  title: string;
+  reference: string | null;
+  page: number | null;
+  content: string;
+  summary: string | null;
+  user_note: string;
+  reference_count: number;
+  created_at: string;
+}

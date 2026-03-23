@@ -221,8 +221,9 @@ export async function POST(request: NextRequest) {
   // Insert pre-generated cues — match by sortedMain order (same order as problems insertion)
   const validCues = sortedMain.flatMap(({ p }, i) => {
     const problemId = problems[i]?.id;
-    if (!problemId || !p.cues || p.cues.length === 0) return [];
-    return p.cues.map((cue) => ({
+    const cues = (p as RawProblem & { cues?: { cue_type: string; cue_level: number; content: string; why_explanation: string }[] }).cues;
+    if (!problemId || !cues || cues.length === 0) return [];
+    return cues.map((cue) => ({
       problem_id: problemId,
       cue_type: cue.cue_type,
       cue_level: cue.cue_level,

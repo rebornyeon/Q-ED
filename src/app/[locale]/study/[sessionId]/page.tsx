@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/sheet";
 import { SupplementaryUpload } from "@/components/supplementary-upload";
 import { MathContent } from "@/components/math-content";
+import { StudyNotesPanel } from "@/components/study-notes-panel";
 import type { Problem, Cue, ScoreData } from "@/types";
 
 export default function StudySessionPage({
@@ -67,6 +68,7 @@ export default function StudySessionPage({
   const [suppOpen, setSuppOpen] = useState(false);
   const [documentId, setDocumentId] = useState<string | null>(null);
   const [documentTitle, setDocumentTitle] = useState<string | null>(null);
+  const [generatingNoteFor, setGeneratingNoteFor] = useState<string | null>(null);
   const [generatingSimilar, setGeneratingSimilar] = useState(false);
   const [similarAdded, setSimilarAdded] = useState<number | null>(null);
   const [weakConceptCounts, setWeakConceptCounts] = useState<Map<string, number>>(() => {
@@ -274,6 +276,14 @@ export default function StudySessionPage({
         setScore(data.score);
       }
     }
+
+    // Fire-and-forget note generation
+    setGeneratingNoteFor(currentProblem.id);
+    fetch("/api/notes/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ problemId: currentProblem.id, sessionId }),
+    }).then(() => setGeneratingNoteFor(null)).catch(() => setGeneratingNoteFor(null));
   }
 
   async function handleGenerateSimilar() {
@@ -606,6 +616,11 @@ export default function StudySessionPage({
                 </SheetContent>
               </Sheet>
             )}
+            <StudyNotesPanel
+              sessionId={sessionId}
+              generatingNoteFor={generatingNoteFor}
+              onNoteGenerated={() => {}}
+            />
             <Button variant="ghost" size="sm" className="gap-1.5 text-xs h-8" onClick={() => router.push(`/${locale}/study`)}>
               <ChevronLeft className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Study Sessions</span>
@@ -875,6 +890,7 @@ export default function StudySessionPage({
                     </button>
                     {isOpen && (
                       <div className="px-3 pb-3 pt-1 border-t border-border/30 space-y-2">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
                         {item.img && <img src={item.img} alt="question image" className="h-24 rounded-md border border-border object-cover" />}
                         <p className="text-sm text-foreground whitespace-pre-wrap">{item.q}</p>
                         <div className="flex gap-2">
@@ -962,6 +978,7 @@ export default function StudySessionPage({
                     </button>
                     {isOpen && (
                       <div className="px-3 pb-3 pt-1 border-t border-border/30 space-y-2">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
                         {item.img && <img src={item.img} alt="question image" className="h-24 rounded-md border border-border object-cover" />}
                         <p className="text-sm text-foreground whitespace-pre-wrap">{item.q}</p>
                         <div className="flex gap-2">
