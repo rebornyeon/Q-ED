@@ -22,7 +22,8 @@
       "Bash(npm install:*)",
       "Bash(export PATH=\"/c/Program Files/nodejs:/c/Users/rebor/AppData/Roaming/npm:$PATH\")",
       "Bash(pnpm build:*)",
-      "Bash(pnpm add:*)"
+      "Bash(pnpm add:*)",
+      "Bash(pnpm run:*)"
     ]
   }
 }

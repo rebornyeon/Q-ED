@@ -17,7 +17,7 @@ import { Progress } from "@/components/ui/progress";
 import {
   ChevronLeft, ChevronRight, Trophy, AlertTriangle,
   Loader2, List, BookPlus, CopyPlus, CheckSquare, Square, Check,
-  MessageCircleQuestion, Send, ChevronDown, ChevronUp, Sparkles
+  MessageCircleQuestion, Send, ChevronDown, ChevronUp, Sparkles, ImageIcon, X
 } from "lucide-react";
 import {
   Sheet, SheetTrigger, SheetContent, SheetHeader, SheetTitle,
@@ -95,9 +95,11 @@ export default function StudySessionPage({
   const [askQuestion, setAskQuestion] = useState("");
   const [, setAskAnswer] = useState<string | null>(null);
   const [askLoading, setAskLoading] = useState(false);
-  const [askHistory, setAskHistory] = useState<{ q: string; a: string }[]>([]);
+  const [askHistory, setAskHistory] = useState<{ q: string; a: string; img?: string }[]>([]);
   const [askExpanded, setAskExpanded] = useState<Set<number>>(new Set());
+  const [askImage, setAskImage] = useState<{ base64: string; mimeType: string; preview: string } | null>(null);
   const askInputRef = useRef<HTMLTextAreaElement>(null);
+  const askImageInputRef = useRef<HTMLInputElement>(null);
 
   const currentProblem: Problem | undefined = problems[currentProblemIndex];
 
@@ -302,16 +304,36 @@ export default function StudySessionPage({
     }
   }
 
+  function handleImageSelect(file: File) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string;
+      const base64 = dataUrl.split(",")[1];
+      setAskImage({ base64, mimeType: file.type, preview: dataUrl });
+    };
+    reader.readAsDataURL(file);
+  }
+
   async function handleAsk() {
-    if (!currentProblem || !askQuestion.trim() || askLoading) return;
+    if (!currentProblem || (!askQuestion.trim() && !askImage) || askLoading) return;
     const q = askQuestion.trim();
+    const imgSnapshot = askImage;
     setAskLoading(true);
     setAskAnswer(null);
+    setAskImage(null);
+    setAskQuestion("");
+    if (askInputRef.current) askInputRef.current.style.height = "36px";
     try {
       const res = await fetch("/api/ask-question", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ problemId: currentProblem.id, question: q, history: askHistory }),
+        body: JSON.stringify({
+          problemId: currentProblem.id,
+          question: q || "What is shown in this image?",
+          history: askHistory,
+          imageBase64: imgSnapshot?.base64 ?? null,
+          imageMimeType: imgSnapshot?.mimeType ?? null,
+        }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -319,10 +341,8 @@ export default function StudySessionPage({
         setAskHistory((prev) => {
           const newIdx = prev.length;
           setAskExpanded(new Set([newIdx]));
-          return [...prev, { q, a: data.answer }];
+          return [...prev, { q: q || "📷 Image", a: data.answer, img: imgSnapshot?.preview }];
         });
-        setAskQuestion("");
-        if (askInputRef.current) askInputRef.current.style.height = "36px";
       }
     } finally {
       setAskLoading(false);
@@ -855,6 +875,7 @@ export default function StudySessionPage({
                     </button>
                     {isOpen && (
                       <div className="px-3 pb-3 pt-1 border-t border-border/30 space-y-2">
+                        {item.img && <img src={item.img} alt="question image" className="h-24 rounded-md border border-border object-cover" />}
                         <p className="text-sm text-foreground whitespace-pre-wrap">{item.q}</p>
                         <div className="flex gap-2">
                           <span className="text-xs font-bold text-green-600 shrink-0 mt-0.5">A:</span>
@@ -875,7 +896,19 @@ export default function StudySessionPage({
 
             {/* Input — pinned to bottom of panel */}
             <div className="px-3 py-3 border-t border-border/40 bg-muted/20">
+              {askImage && (
+                <div className="relative inline-block mb-2">
+                  <img src={askImage.preview} alt="upload preview" className="h-16 rounded-md border border-border object-cover" />
+                  <button onClick={() => setAskImage(null)} className="absolute -top-1.5 -right-1.5 bg-background border border-border rounded-full p-0.5 hover:bg-muted">
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              )}
               <div className="flex gap-2 items-end">
+                <input ref={askImageInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImageSelect(f); e.target.value = ""; }} />
+                <button onClick={() => askImageInputRef.current?.click()} className="shrink-0 p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors" title="Attach image">
+                  <ImageIcon className="h-4 w-4" />
+                </button>
                 <textarea
                   ref={askInputRef}
                   value={askQuestion}
@@ -891,7 +924,7 @@ export default function StudySessionPage({
                   style={{ minHeight: "32px" }}
                   disabled={askLoading}
                 />
-                <Button size="sm" onClick={handleAsk} disabled={askLoading || !askQuestion.trim()} className="shrink-0 gap-1 h-8 px-2.5">
+                <Button size="sm" onClick={handleAsk} disabled={askLoading || (!askQuestion.trim() && !askImage)} className="shrink-0 gap-1 h-8 px-2.5">
                   {askLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
                 </Button>
               </div>
@@ -929,6 +962,7 @@ export default function StudySessionPage({
                     </button>
                     {isOpen && (
                       <div className="px-3 pb-3 pt-1 border-t border-border/30 space-y-2">
+                        {item.img && <img src={item.img} alt="question image" className="h-24 rounded-md border border-border object-cover" />}
                         <p className="text-sm text-foreground whitespace-pre-wrap">{item.q}</p>
                         <div className="flex gap-2">
                           <span className="text-xs font-bold text-green-600 shrink-0 mt-1">A:</span>
@@ -949,7 +983,18 @@ export default function StudySessionPage({
             </div>
           )}
 
+          {askImage && (
+            <div className="relative inline-block mb-2">
+              <img src={askImage.preview} alt="upload preview" className="h-16 rounded-md border border-border object-cover" />
+              <button onClick={() => setAskImage(null)} className="absolute -top-1.5 -right-1.5 bg-background border border-border rounded-full p-0.5 hover:bg-muted">
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          )}
           <div className="flex gap-2 items-end">
+            <button onClick={() => askImageInputRef.current?.click()} className="shrink-0 p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors" title="Attach image">
+              <ImageIcon className="h-4 w-4" />
+            </button>
             <textarea
               value={askQuestion}
               onChange={(e) => {
@@ -964,7 +1009,7 @@ export default function StudySessionPage({
               style={{ minHeight: "36px" }}
               disabled={askLoading}
             />
-            <Button size="sm" onClick={handleAsk} disabled={askLoading || !askQuestion.trim()} className="shrink-0 gap-1 h-9">
+            <Button size="sm" onClick={handleAsk} disabled={askLoading || (!askQuestion.trim() && !askImage)} className="shrink-0 gap-1 h-9">
               {askLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
             </Button>
           </div>
