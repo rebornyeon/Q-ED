@@ -49,9 +49,9 @@ export function CueCard({ cue, showWhy, onToggleWhy, collapsed, onToggleCollapse
   }
 
   return (
-    <div className={`border-l-3 ${meta.accent} ${meta.bg} rounded-r-lg px-4 py-3 space-y-2`}>
+    <div className={`border-l-3 ${meta.accent} ${meta.bg} rounded-r-lg px-4 py-3 space-y-2 select-text`}>
       {/* Header row: level badge + label + Why? (top-right) + collapse toggle */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 select-none">
         {onToggleCollapse && (
           <button onClick={onToggleCollapse} className="shrink-0 text-muted-foreground hover:text-foreground transition-colors">
             <ChevronUp className="h-3.5 w-3.5" />
@@ -72,12 +72,12 @@ export function CueCard({ cue, showWhy, onToggleWhy, collapsed, onToggleCollapse
         )}
       </div>
 
-      <MathContent className="text-sm leading-relaxed">{cue.content}</MathContent>
+      <MathContent className="text-sm leading-relaxed select-text cursor-text">{cue.content}</MathContent>
 
       {cue.why_explanation && showWhy && (
         <>
           <Separator className="opacity-30" />
-          <MathContent className="text-xs text-muted-foreground leading-relaxed pl-3 border-l-2 border-primary/20">
+          <MathContent className="text-xs text-muted-foreground leading-relaxed pl-3 border-l-2 border-primary/20 select-text cursor-text">
             {cue.why_explanation}
           </MathContent>
         </>

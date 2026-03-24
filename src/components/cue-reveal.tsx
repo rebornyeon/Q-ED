@@ -49,11 +49,11 @@ export function CueReveal({ cues }: CueRevealProps) {
   return (
     <div className="space-y-2">
       {understandingCue && (
-        <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20 px-4 py-3 mb-4">
-          <div className="flex items-center gap-2 mb-1.5">
+        <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20 px-4 py-3 mb-4 select-text">
+          <div className="flex items-center gap-2 mb-1.5 select-none">
             <span className="text-xs font-bold uppercase tracking-wide text-blue-600 dark:text-blue-400">Understanding the Question</span>
           </div>
-          <MathContent className="text-sm leading-relaxed text-foreground">{understandingCue.content.replace(/^Understanding:\s*/i, "")}</MathContent>
+          <MathContent className="text-sm leading-relaxed text-foreground select-text cursor-text">{understandingCue.content.replace(/^Understanding:\s*/i, "")}</MathContent>
         </div>
       )}
 
