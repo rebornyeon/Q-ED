@@ -17,12 +17,13 @@ import { Progress } from "@/components/ui/progress";
 import {
   ChevronLeft, ChevronRight, Trophy, AlertTriangle,
   Loader2, List, BookPlus, CopyPlus, CheckSquare, Square, Check,
-  MessageCircleQuestion, Send, ChevronDown, ChevronUp, Sparkles, ImageIcon, X, Plus,
+  MessageCircleQuestion, Send, ChevronDown, ChevronUp, Sparkles, ImageIcon, X, Plus, FileText, ExternalLink,
 } from "lucide-react";
 import {
   Sheet, SheetTrigger, SheetContent, SheetHeader, SheetTitle,
 } from "@/components/ui/sheet";
 import { SupplementaryUpload } from "@/components/supplementary-upload";
+import { PDFPageViewer, openPDFInNewTab } from "@/components/pdf-page-viewer";
 import { MathContent } from "@/components/math-content";
 import { StudyNotesPanel } from "@/components/study-notes-panel";
 import type { Problem, Cue, ScoreData, SupplementaryDocument } from "@/types";
@@ -68,6 +69,8 @@ export default function StudySessionPage({
   const [suppOpen, setSuppOpen] = useState(false);
   const [documentId, setDocumentId] = useState<string | null>(null);
   const [documentTitle, setDocumentTitle] = useState<string | null>(null);
+  const [documentFilePath, setDocumentFilePath] = useState<string | null>(null);
+  const [pdfPageOpen, setPdfPageOpen] = useState(false);
   const [generatingNoteFor, setGeneratingNoteFor] = useState<string | null>(null);
   const [generatingSimilar, setGeneratingSimilar] = useState(false);
   const [similarAdded, setSimilarAdded] = useState<number | null>(null);
@@ -193,6 +196,7 @@ export default function StudySessionPage({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const docs = (sessionData as any).documents;
       if (docs?.title) setDocumentTitle(docs.title);
+      if (docs?.file_path) setDocumentFilePath(docs.file_path);
       setLoading(false);
     }
     load();
@@ -212,6 +216,7 @@ export default function StudySessionPage({
     setAskAnswer(null);
     setAskHistory([]);
     setAskExpanded(new Set());
+    setPdfPageOpen(false);
   }, [currentProblemIndex]);
 
   // Load cues when problem changes
@@ -1023,13 +1028,50 @@ export default function StudySessionPage({
           );
         })()}
 
-        {/* Source metadata */}
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground/50 mb-6">
+        {/* Source metadata + PDF buttons */}
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground/50 mb-3">
           {documentTitle && <span className="font-medium">{documentTitle}</span>}
           {currentProblem.section && <><span>·</span><span>{currentProblem.section}</span></>}
           {currentProblem.page && <><span>·</span><span>p.{currentProblem.page}</span></>}
           {currentProblem.problem_number && <><span>·</span><span>#{currentProblem.problem_number}</span></>}
+          <span className="flex-1" />
+          {/* View this page */}
+          {documentFilePath && currentProblem.page && (
+            <button
+              onClick={() => setPdfPageOpen((v) => !v)}
+              className={`flex items-center gap-1 px-2 py-0.5 rounded-full border transition-all text-[10px] font-medium ${
+                pdfPageOpen
+                  ? "bg-primary/10 border-primary/40 text-primary"
+                  : "border-border/40 hover:border-primary/30 hover:text-foreground"
+              }`}
+            >
+              <FileText className="h-2.5 w-2.5" />
+              {pdfPageOpen ? "Hide page" : `View p.${currentProblem.page}`}
+            </button>
+          )}
+          {/* Open full PDF */}
+          {documentFilePath && (
+            <button
+              onClick={() => openPDFInNewTab(documentFilePath)}
+              className="flex items-center gap-1 px-2 py-0.5 rounded-full border border-border/40 hover:border-primary/30 hover:text-foreground transition-all text-[10px] font-medium"
+            >
+              <ExternalLink className="h-2.5 w-2.5" />
+              Open PDF
+            </button>
+          )}
         </div>
+
+        {/* Inline PDF page viewer */}
+        {pdfPageOpen && documentFilePath && currentProblem.page && (
+          <div className="mb-4 rounded-xl overflow-hidden border border-border/40">
+            <PDFPageViewer
+              filePath={documentFilePath}
+              initialPage={currentProblem.page}
+            />
+          </div>
+        )}
+
+        <div className="mb-6" />
 
         {/* Hint Stack — tighter gap from question */}
         <div className="mb-8">
