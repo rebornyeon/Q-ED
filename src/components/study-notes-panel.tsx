@@ -177,7 +177,7 @@ export function StudyNotesPanel({ sessionId, generatingNoteFor, onNoteGenerated 
           <Loader2 className="h-3 w-3 animate-spin text-primary" />
         )}
       </SheetTrigger>
-      <SheetContent side="right" className="w-full sm:max-w-xl overflow-y-auto p-0">
+      <SheetContent side="right" className="w-full sm:w-[440px] sm:max-w-[440px] overflow-y-auto p-0" noOverlay>
         <SheetHeader className="p-4 border-b border-border sticky top-0 bg-background z-10">
           <div className="flex items-center justify-between">
             <SheetTitle>Study Notes</SheetTitle>
@@ -305,9 +305,9 @@ export function StudyNotesPanel({ sessionId, generatingNoteFor, onNoteGenerated 
 
                 {/* Personal note area */}
                 <div>
-                  <p className="text-blue-600 text-xs font-semibold mb-1">My Notes</p>
+                  <p className="text-blue-400 text-xs font-medium mb-1">My Notes</p>
                   <textarea
-                    className="w-full text-sm text-blue-700 dark:text-blue-400 placeholder:text-blue-300 border border-blue-200 dark:border-blue-800 rounded-lg px-3 py-2 bg-blue-50 dark:bg-blue-950/30 focus:outline-none focus:ring-1 focus:ring-blue-400 resize-y min-h-[120px]"
+                    className="w-full text-sm text-blue-600/80 dark:text-blue-300/70 placeholder:text-blue-200 dark:placeholder:text-blue-800 border border-blue-100 dark:border-blue-900/50 rounded-lg px-3 py-2 bg-blue-50/40 dark:bg-blue-950/15 focus:outline-none focus:ring-1 focus:ring-blue-200 resize-y min-h-[120px]"
                     rows={6}
                     placeholder="Add your own notes here..."
                     value={draftValue}
