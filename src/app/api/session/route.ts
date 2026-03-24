@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import type { GeminiAnalysisResult, RawProblem, SupplementaryInsights } from "@/types";
 
+export const maxDuration = 120;
+
 // Rule-based exam likelihood scoring (no extra API call)
 function scoreProblems(
   problems: RawProblem[],
@@ -56,15 +58,78 @@ function scoreProblems(
   });
 }
 
+// Proportional section distribution for max problem count
+function selectByMaxCount(
+  sorted: { p: RawProblem; i: number; score: { exam_likelihood: number | null; is_exam_overlap: boolean | null } }[],
+  maxCount: number
+): typeof sorted {
+  if (sorted.length <= maxCount) return sorted;
+
+  // Group by section, preserving sorted order within each section
+  const sectionMap = new Map<string, typeof sorted>();
+  for (const item of sorted) {
+    const key = item.p.section ?? "__none__";
+    if (!sectionMap.has(key)) sectionMap.set(key, []);
+    sectionMap.get(key)!.push(item);
+  }
+
+  const sections = [...sectionMap.values()];
+  const total = sorted.length;
+  const selected: typeof sorted = [];
+
+  // Proportional quota per section (at least 1 per section if possible)
+  const quotas = sections.map((items) =>
+    Math.max(1, Math.round((items.length / total) * maxCount))
+  );
+
+  // Trim quotas if sum exceeds maxCount (trim largest sections)
+  let sum = quotas.reduce((a, b) => a + b, 0);
+  if (sum > maxCount) {
+    // Sort sections by size descending, reduce largest first
+    const order = quotas.map((q, i) => i).sort((a, b) => quotas[b] - quotas[a]);
+    for (const idx of order) {
+      if (sum <= maxCount) break;
+      const reduce = Math.min(quotas[idx] - 1, sum - maxCount);
+      if (reduce > 0) { quotas[idx] -= reduce; sum -= reduce; }
+    }
+  }
+
+  for (let i = 0; i < sections.length; i++) {
+    selected.push(...sections[i].slice(0, quotas[i]));
+  }
+
+  // If still under maxCount due to rounding, fill with remaining highest-scored
+  if (selected.length < maxCount) {
+    const selectedSet = new Set(selected.map((x) => x.i));
+    const remaining = sorted.filter((x) => !selectedSet.has(x.i));
+    selected.push(...remaining.slice(0, maxCount - selected.length));
+  }
+
+  return selected.slice(0, maxCount);
+}
+
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { documentId: singleDocId, documentIds: multiDocIds, conceptFilter, includeSupplementary } = await request.json();
+  const {
+    documentId: singleDocId,
+    documentIds: multiDocIds,
+    conceptFilter,
+    includeSupplementary,
+    maxProblems,
+    difficultyRange,
+    problemTypes,
+    sections,
+  } = await request.json();
   const documentIds: string[] = multiDocIds ?? (singleDocId ? [singleDocId] : []);
   const primaryDocId = documentIds[0];
   const filterConcepts: string[] | null = conceptFilter ?? null;
+  const filterMaxProblems: number | null = maxProblems ?? null;
+  const filterDifficultyRange: [number, number] | null = difficultyRange ?? null;
+  const filterProblemTypes: string[] | null = problemTypes?.length > 0 ? problemTypes : null;
+  const filterSections: string[] | null = sections?.length > 0 ? sections : null;
 
   if (documentIds.length === 0) {
     return NextResponse.json({ error: "documentId or documentIds is required" }, { status: 400 });
@@ -124,11 +189,25 @@ export async function POST(request: NextRequest) {
     Array.isArray(d.problems) ? (d.problems as RawProblem[]) : []
   );
 
-  // Apply concept filter
+  // Apply all filters
   function applyFilter(probs: RawProblem[]) {
-    return filterConcepts
-      ? probs.filter((p) => p.concepts.some((c) => filterConcepts.includes(c)))
-      : probs;
+    let result = probs;
+    if (filterConcepts) {
+      result = result.filter((p) => p.concepts.some((c) => filterConcepts.includes(c)));
+    }
+    if (filterDifficultyRange) {
+      const [min, max] = filterDifficultyRange;
+      result = result.filter((p) => p.difficulty == null || (p.difficulty >= min && p.difficulty <= max));
+    }
+    if (filterProblemTypes) {
+      result = result.filter((p) =>
+        !p.problem_type || filterProblemTypes.some((t) => p.problem_type.toLowerCase().includes(t.toLowerCase()))
+      );
+    }
+    if (filterSections) {
+      result = result.filter((p) => filterSections.includes(p.section ?? ""));
+    }
+    return result;
   }
 
   const filteredMain = applyFilter(mainProblems);
@@ -158,7 +237,9 @@ export async function POST(request: NextRequest) {
         return avg(b[1]) - avg(a[1]);
       })
     : [...sectionGroups.entries()];
-  const sortedMain = sectionsSorted.flatMap(([, group]) => group);
+  const allSortedMain = sectionsSorted.flatMap(([, group]) => group);
+  // Apply max problem count with proportional section distribution
+  const sortedMain = filterMaxProblems ? selectByMaxCount(allSortedMain, filterMaxProblems) : allSortedMain;
 
   // Supplementary problems (appended after main)
   const suppRawProblems: (RawProblem & { suppTitle: string })[] = [];
@@ -208,36 +289,29 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ session, problems: [] });
   }
 
-  const { data: problems, error: problemsError } = await supabase
-    .from("problems")
-    .insert(allProblemsToInsert)
-    .select();
+  console.log(`[session] Inserting ${allProblemsToInsert.length} problems in batches`);
 
-  if (problemsError) {
-    console.error("Problems insert error:", problemsError);
-    return NextResponse.json({ error: "Failed to create problems", detail: problemsError.message }, { status: 500 });
+  // Batch insert to avoid PostgREST row limits on large datasets
+  const BATCH_SIZE = 150;
+  let insertError: { message: string } | null = null;
+  for (let i = 0; i < allProblemsToInsert.length; i += BATCH_SIZE) {
+    const batch = allProblemsToInsert.slice(i, i + BATCH_SIZE);
+    const { error } = await supabase.from("problems").insert(batch);
+    if (error) {
+      console.error(`[session] Batch ${Math.floor(i / BATCH_SIZE) + 1} insert error:`, error);
+      insertError = error;
+      break;
+    }
   }
 
-  // Insert pre-generated cues — match by sortedMain order (same order as problems insertion)
-  const validCues = sortedMain.flatMap(({ p }, i) => {
-    const problemId = problems[i]?.id;
-    const cues = (p as RawProblem & { cues?: { cue_type: string; cue_level: number; content: string; why_explanation: string }[] }).cues;
-    if (!problemId || !cues || cues.length === 0) return [];
-    return cues.map((cue) => ({
-      problem_id: problemId,
-      cue_type: cue.cue_type,
-      cue_level: cue.cue_level,
-      content: cue.content,
-      why_explanation: cue.why_explanation,
-    }));
-  });
-  if (validCues.length > 0) {
-    await supabase.from("cues").insert(validCues);
+  if (insertError) {
+    return NextResponse.json({ error: "Failed to create problems", detail: insertError.message }, { status: 500 });
   }
+
+  console.log(`[session] All batches inserted successfully`);
 
   return NextResponse.json({
     session,
-    problems,
     filtered: filterConcepts !== null,
     supplementaryCount: filteredSupp.length,
     hasExamScoring: hasSupplementary,

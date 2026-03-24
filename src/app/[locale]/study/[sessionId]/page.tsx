@@ -17,7 +17,7 @@ import { Progress } from "@/components/ui/progress";
 import {
   ChevronLeft, ChevronRight, Trophy, AlertTriangle,
   Loader2, List, BookPlus, CopyPlus, CheckSquare, Square, Check,
-  MessageCircleQuestion, Send, ChevronDown, ChevronUp, Sparkles, ImageIcon, X
+  MessageCircleQuestion, Send, ChevronDown, ChevronUp, Sparkles, ImageIcon, X, Plus,
 } from "lucide-react";
 import {
   Sheet, SheetTrigger, SheetContent, SheetHeader, SheetTitle,
@@ -25,7 +25,7 @@ import {
 import { SupplementaryUpload } from "@/components/supplementary-upload";
 import { MathContent } from "@/components/math-content";
 import { StudyNotesPanel } from "@/components/study-notes-panel";
-import type { Problem, Cue, ScoreData } from "@/types";
+import type { Problem, Cue, ScoreData, SupplementaryDocument } from "@/types";
 
 export default function StudySessionPage({
   params,
@@ -95,6 +95,19 @@ export default function StudySessionPage({
   });
   const [showSuggestSimilar, setShowSuggestSimilar] = useState(false);
   const [startingWeakSession, setStartingWeakSession] = useState(false);
+
+  // New session creation state
+  const [newSessionOpen, setNewSessionOpen] = useState(false);
+  const [nsMaxProblems, setNsMaxProblems] = useState<number | null>(null);
+  const [nsDifficulty, setNsDifficulty] = useState<[number, number] | null>(null);
+  const [nsTypes, setNsTypes] = useState<Set<string>>(new Set());
+  const [nsSections, setNsSections] = useState<Set<string>>(new Set());
+  const [nsConcepts, setNsConcepts] = useState<Set<string>>(new Set());
+  const [creatingNewSession, setCreatingNewSession] = useState(false);
+
+  // Supplementary docs added in this session (to enable "새 세션" shortcut)
+  const [suppDocsInSession, setSuppDocsInSession] = useState<SupplementaryDocument[]>([]);
+
   const [askQuestion, setAskQuestion] = useState("");
   const [, setAskAnswer] = useState<string | null>(null);
   const [askLoading, setAskLoading] = useState(false);
@@ -153,17 +166,28 @@ export default function StudySessionPage({
 
       if (!sessionData) { router.push(`/${locale}/study`); return; }
 
-      const { data: problemsData } = await supabase
-        .from("problems")
-        .select("*")
-        .eq("session_id", sessionId)
-        .order("created_at");
+      // Paginate to handle large problem sets (PostgREST max-rows limits)
+      const allProblems: Problem[] = [];
+      const PAGE_SIZE = 500;
+      let from = 0;
+      while (true) {
+        const { data: page, error: pageErr } = await supabase
+          .from("problems")
+          .select("*")
+          .eq("session_id", sessionId)
+          .order("created_at")
+          .range(from, from + PAGE_SIZE - 1);
+        if (pageErr || !page || page.length === 0) break;
+        allProblems.push(...(page as Problem[]));
+        if (page.length < PAGE_SIZE) break;
+        from += PAGE_SIZE;
+      }
 
-      if (problemsData) {
-        setProblems(problemsData as Problem[]);
+      if (allProblems.length > 0) {
+        setProblems(allProblems);
         // Restore last position using index captured synchronously before effects ran
         const idx = savedStartIndexRef.current;
-        if (idx > 0 && idx < problemsData.length) jumpToIndex(idx);
+        if (idx > 0 && idx < allProblems.length) jumpToIndex(idx);
       }
       if (sessionData.document_id) setDocumentId(sessionData.document_id);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -254,6 +278,32 @@ export default function StudySessionPage({
       }
     } finally {
       setStartingWeakSession(false);
+    }
+  }
+
+  async function createNewSession(opts?: { conceptFilter?: string[] }) {
+    if (!documentId) return;
+    setCreatingNewSession(true);
+    try {
+      const res = await fetch("/api/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          documentId,
+          conceptFilter: opts?.conceptFilter ?? (nsConcepts.size > 0 ? Array.from(nsConcepts) : null),
+          maxProblems: nsMaxProblems,
+          difficultyRange: nsDifficulty,
+          problemTypes: nsTypes.size > 0 ? Array.from(nsTypes) : null,
+          sections: nsSections.size > 0 ? Array.from(nsSections) : null,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        router.push(`/${locale}/study/${data.session.id}`);
+      }
+    } finally {
+      setCreatingNewSession(false);
+      setNewSessionOpen(false);
     }
   }
 
@@ -532,6 +582,11 @@ export default function StudySessionPage({
   const currentNeedsRetry = (currentLastRating === "again" || currentLastRating === "hard") && !generatedIds.has(currentProblem.id);
   const isMastered = currentLastRating === "easy" && revealedLevel === 0;
 
+  // Extract unique concepts, types, and sections from session problems (for new session filters)
+  const allSessionConcepts = Array.from(new Set(problems.flatMap((p) => p.concepts))).sort();
+  const allSessionTypes = Array.from(new Set(problems.map((p) => p.problem_type).filter((t): t is string => Boolean(t)))).sort();
+  const allSessionSections = Array.from(new Set(problems.map((p) => p.section).filter((s): s is string => Boolean(s)))).sort();
+
   // Build question list groups (outside JSX to avoid IIFE parser issues)
   const sectionOrder: string[] = [];
   const sectionMap = new Map<string, { problem: Problem; index: number }[]>();
@@ -664,19 +719,202 @@ export default function StudySessionPage({
               </SheetContent>
             </Sheet>
             {documentId && (
-              <Sheet open={suppOpen} onOpenChange={setSuppOpen}>
-                <SheetTrigger render={<Button variant="ghost" size="sm" className="gap-1.5 text-xs h-8" />}>
-                  <BookPlus className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">Materials</span>
-                </SheetTrigger>
-                <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto p-0">
-                  <SheetHeader className="p-4 border-b border-border">
-                    <SheetTitle>Supplementary Materials</SheetTitle>
-                    <p className="text-xs text-muted-foreground mt-1">Add past exams, professor notes, or study guides.</p>
-                  </SheetHeader>
-                  <div className="p-4"><SupplementaryUpload documentId={documentId} /></div>
-                </SheetContent>
-              </Sheet>
+              <>
+                {/* New session sheet */}
+                <Sheet open={newSessionOpen} onOpenChange={setNewSessionOpen}>
+                  <SheetTrigger render={<Button variant="ghost" size="sm" className="gap-1.5 text-xs h-8" />}>
+                    <Plus className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">New Session</span>
+                  </SheetTrigger>
+                  <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto p-0">
+                    <SheetHeader className="p-4 border-b border-border sticky top-0 bg-background z-10">
+                      <SheetTitle>New Session</SheetTitle>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Start a focused session from the same PDF with different filters.
+                      </p>
+                    </SheetHeader>
+                    <div className="p-4 space-y-5">
+                      {/* Max problems */}
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Problem limit</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {([null, 10, 20, 30, 50] as (number | null)[]).map((n) => (
+                            <button
+                              key={n ?? "all"}
+                              onClick={() => setNsMaxProblems(n)}
+                              className={`text-xs font-medium px-3 py-1 rounded-full border transition-all ${
+                                nsMaxProblems === n
+                                  ? "bg-primary text-primary-foreground border-primary"
+                                  : "bg-muted/40 text-muted-foreground border-border/50 hover:border-border"
+                              }`}
+                            >
+                              {n === null ? `All (${problems.length})` : `${n} problems`}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Difficulty */}
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Difficulty</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {([
+                            { label: "All", value: null },
+                            { label: "Easy (1-2)", value: [1, 2] as [number, number] },
+                            { label: "Medium (3)", value: [3, 3] as [number, number] },
+                            { label: "Hard (4-5)", value: [4, 5] as [number, number] },
+                          ]).map(({ label, value }) => (
+                            <button
+                              key={label}
+                              onClick={() => setNsDifficulty(value)}
+                              className={`text-xs font-medium px-3 py-1 rounded-full border transition-all ${
+                                JSON.stringify(nsDifficulty) === JSON.stringify(value)
+                                  ? "bg-primary text-primary-foreground border-primary"
+                                  : "bg-muted/40 text-muted-foreground border-border/50 hover:border-border"
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Sections */}
+                      {allSessionSections.length > 0 && (
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Chapters / Sections</p>
+                            {nsSections.size > 0 && (
+                              <button onClick={() => setNsSections(new Set())} className="text-xs text-muted-foreground hover:text-foreground">Clear</button>
+                            )}
+                          </div>
+                          <div className="flex flex-col gap-1 max-h-48 overflow-y-auto">
+                            {allSessionSections.map((s) => (
+                              <button
+                                key={s}
+                                onClick={() => setNsSections((prev) => { const n = new Set(prev); if (n.has(s)) { n.delete(s); } else { n.add(s); } return n; })}
+                                className={`text-xs font-medium px-3 py-1.5 rounded-lg border text-left transition-all ${
+                                  nsSections.has(s)
+                                    ? "bg-primary text-primary-foreground border-primary"
+                                    : "bg-muted/40 text-muted-foreground border-border/50 hover:border-border"
+                                }`}
+                              >
+                                {s}
+                              </button>
+                            ))}
+                          </div>
+                          {nsSections.size === 0 && <p className="text-xs text-muted-foreground">None selected = all chapters</p>}
+                        </div>
+                      )}
+
+                      {/* Problem types */}
+                      {allSessionTypes.length > 0 && (
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Problem type</p>
+                            {nsTypes.size > 0 && (
+                              <button onClick={() => setNsTypes(new Set())} className="text-xs text-muted-foreground hover:text-foreground">Clear</button>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {allSessionTypes.map((type) => (
+                              <button
+                                key={type}
+                                onClick={() => setNsTypes((prev) => { const n = new Set(prev); if (n.has(type)) { n.delete(type); } else { n.add(type); } return n; })}
+                                className={`text-xs font-medium px-3 py-1 rounded-full border transition-all ${
+                                  nsTypes.has(type)
+                                    ? "bg-primary text-primary-foreground border-primary"
+                                    : "bg-muted/40 text-muted-foreground border-border/50 hover:border-border"
+                                }`}
+                              >
+                                {type}
+                              </button>
+                            ))}
+                          </div>
+                          {nsTypes.size === 0 && <p className="text-xs text-muted-foreground">None selected = all types</p>}
+                        </div>
+                      )}
+
+                      {/* Concepts */}
+                      {allSessionConcepts.length > 0 && (
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Concepts</p>
+                            {nsConcepts.size > 0 && (
+                              <button onClick={() => setNsConcepts(new Set())} className="text-xs text-muted-foreground hover:text-foreground">Clear</button>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto">
+                            {allSessionConcepts.map((c) => (
+                              <button
+                                key={c}
+                                onClick={() => setNsConcepts((prev) => { const n = new Set(prev); if (n.has(c)) { n.delete(c); } else { n.add(c); } return n; })}
+                                className={`text-xs font-medium px-2.5 py-1 rounded-full border transition-all ${
+                                  nsConcepts.has(c)
+                                    ? "bg-primary text-primary-foreground border-primary"
+                                    : "bg-muted/40 text-muted-foreground border-border/50 hover:border-border"
+                                }`}
+                              >
+                                {c}
+                              </button>
+                            ))}
+                          </div>
+                          {nsConcepts.size === 0 && <p className="text-xs text-muted-foreground">None selected = all concepts</p>}
+                        </div>
+                      )}
+
+                      <Button
+                        className="w-full"
+                        onClick={() => createNewSession()}
+                        disabled={creatingNewSession}
+                      >
+                        {creatingNewSession
+                          ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Creating session...</>
+                          : `🚀 Start — ${nsMaxProblems ? `${nsMaxProblems} problems` : "All problems"}${nsSections.size > 0 ? ` · ${nsSections.size} chapter${nsSections.size > 1 ? "s" : ""}` : ""}${nsConcepts.size > 0 ? ` · ${nsConcepts.size} concept${nsConcepts.size > 1 ? "s" : ""}` : ""}`
+                        }
+                      </Button>
+                    </div>
+                  </SheetContent>
+                </Sheet>
+
+                {/* Supplementary materials sheet */}
+                <Sheet open={suppOpen} onOpenChange={setSuppOpen}>
+                  <SheetTrigger render={<Button variant="ghost" size="sm" className="gap-1.5 text-xs h-8" />}>
+                    <BookPlus className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Materials</span>
+                  </SheetTrigger>
+                  <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto p-0">
+                    <SheetHeader className="p-4 border-b border-border sticky top-0 bg-background z-10">
+                      <SheetTitle>Supplementary Materials</SheetTitle>
+                      <p className="text-xs text-muted-foreground mt-1">Add past exams, professor notes, or study guides.</p>
+                    </SheetHeader>
+                    <div className="p-4 space-y-4">
+                      <SupplementaryUpload
+                        documentId={documentId}
+                        onDocsChange={setSuppDocsInSession}
+                      />
+                      {suppDocsInSession.length > 0 && (
+                        <div className="pt-2 border-t border-border/40">
+                          <p className="text-xs text-muted-foreground mb-2">
+                            Materials added. Start a new session to apply exam-likelihood scoring based on these materials.
+                          </p>
+                          <Button
+                            className="w-full"
+                            size="sm"
+                            onClick={() => { setSuppOpen(false); createNewSession(); }}
+                            disabled={creatingNewSession}
+                          >
+                            {creatingNewSession
+                              ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Creating session...</>
+                              : "✦ New session with these materials"
+                            }
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </SheetContent>
+                </Sheet>
+              </>
             )}
             <StudyNotesPanel
               sessionId={sessionId}
