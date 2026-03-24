@@ -290,7 +290,7 @@ export default function StudySessionPage({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           documentId,
-          conceptFilter: opts?.conceptFilter ?? (nsConcepts.size > 0 ? Array.from(nsConcepts) : null),
+          conceptFilter: opts?.conceptFilter ?? (nsConcepts.size > 0 && nsConcepts.size < allSessionConcepts.length ? Array.from(nsConcepts) : null),
           maxProblems: nsMaxProblems,
           difficultyRange: nsDifficulty,
           problemTypes: nsTypes.size > 0 ? Array.from(nsTypes) : null,

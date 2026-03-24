@@ -212,7 +212,10 @@ export default function UploadPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           documentIds,
-          conceptFilter: selectedConcepts.size > 0 ? Array.from(selectedConcepts) : null,
+          // If all concepts selected, treat as no filter (avoids excluding problems with empty concepts)
+          conceptFilter: selectedConcepts.size > 0 && selectedConcepts.size < concepts.length
+            ? Array.from(selectedConcepts)
+            : null,
           includeSupplementary,
         }),
       });
