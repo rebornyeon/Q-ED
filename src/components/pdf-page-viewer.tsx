@@ -43,10 +43,7 @@ export function PDFPageViewer({ filePath, initialPage = 1, mode = "page" }: Prop
 
         // Dynamically import pdfjs to avoid SSR issues
         const pdfjsLib = await import("pdfjs-dist");
-        pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-          "pdfjs-dist/build/pdf.worker.mjs",
-          import.meta.url
-        ).toString();
+        pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
 
         const pdf = await pdfjsLib.getDocument({ url: data.signedUrl }).promise;
         if (cancelled) return;
