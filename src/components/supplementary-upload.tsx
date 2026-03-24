@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { Upload, Loader2, X, CheckCircle2, AlertCircle } from "lucide-react";
+import { Upload, Loader2, X, CheckCircle2, AlertCircle, Clock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { SupplementaryDocument, SupplementaryDocType } from "@/types";
 
@@ -27,9 +27,19 @@ export function SupplementaryUpload({ documentId, initialDocs = [], onDocsChange
   const [docs, setDocs] = useState<SupplementaryDocument[]>(initialDocs);
   const [selectedType, setSelectedType] = useState<SupplementaryDocType>("past_exam");
   const [uploading, setUploading] = useState<string | null>(null);
+  const [uploadElapsed, setUploadElapsed] = useState(0);
+  const [uploadEstimate, setUploadEstimate] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  function estimateSupplementarySecs(bytes: number) {
+    const pages = Math.max(1, Math.round(bytes / 75000));
+    const chunks = Math.ceil(pages / 8);
+    const batches = Math.ceil(chunks / 3);
+    return Math.max(15, batches * 25 + 10);
+  }
 
   async function uploadFile(file: File) {
     if (file.type !== "application/pdf") {
@@ -38,6 +48,11 @@ export function SupplementaryUpload({ documentId, initialDocs = [], onDocsChange
     }
     setError(null);
     setUploading(file.name);
+    const estimate = estimateSupplementarySecs(file.size);
+    setUploadEstimate(estimate);
+    setUploadElapsed(0);
+    const start = Date.now();
+    timerRef.current = setInterval(() => setUploadElapsed(Math.floor((Date.now() - start) / 1000)), 500);
 
     const formData = new FormData();
     formData.append("file", file);
@@ -46,6 +61,10 @@ export function SupplementaryUpload({ documentId, initialDocs = [], onDocsChange
     formData.append("docType", selectedType);
 
     const res = await fetch("/api/supplementary", { method: "POST", body: formData });
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    setUploadElapsed(0);
+    setUploadEstimate(0);
+
     if (res.ok) {
       const data = await res.json();
       const next = [...docs, data.doc as SupplementaryDocument];
@@ -121,9 +140,16 @@ export function SupplementaryUpload({ documentId, initialDocs = [], onDocsChange
         }`}
       >
         {uploading ? (
-          <div className="flex items-center justify-center gap-2 text-muted-foreground text-sm">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            <span>Analyzing <span className="font-medium">{uploading}</span>...</span>
+          <div className="space-y-1.5 py-1">
+            <div className="flex items-center justify-center gap-2 text-muted-foreground text-sm">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>Analyzing <span className="font-medium">{uploading}</span>...</span>
+            </div>
+            <div className="flex items-center justify-center gap-3 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{uploadElapsed}초</span>
+              <span>·</span>
+              <span>{uploadElapsed < uploadEstimate ? `~${uploadEstimate - uploadElapsed}초 남음` : "마무리 중..."}</span>
+            </div>
           </div>
         ) : (
           <div className="flex items-center justify-center gap-2 text-muted-foreground text-sm">

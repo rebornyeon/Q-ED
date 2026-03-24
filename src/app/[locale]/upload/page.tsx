@@ -16,12 +16,12 @@ import {
 
 // Estimate pages from file size (~75KB per page average)
 function estimatePages(bytes: number) { return Math.max(1, Math.round(bytes / 75000)); }
-// Estimate seconds: chunks ceil(pages/8) processed in groups of 3, ~5s per batch
-function estimateSeconds(totalBytes: number) {
-  const pages = estimatePages(totalBytes);
+// Estimate seconds per file: chunks ceil(pages/8) processed in groups of 3, ~25s per batch + overhead
+function estimateSeconds(bytes: number) {
+  const pages = estimatePages(bytes);
   const chunks = Math.ceil(pages / 8);
   const batches = Math.ceil(chunks / 3);
-  return Math.max(10, batches * 6);
+  return Math.max(15, batches * 25 + 10);
 }
 
 const PHASES = [
@@ -31,7 +31,7 @@ const PHASES = [
   "개념 정리 중...",
   "마무리 중...",
 ];
-import type { Concept, SupplementaryDocument, GeminiAnalysisResult } from "@/types";
+import type { Concept, SupplementaryDocument, GeminiAnalysisResult, SupplementaryDocType } from "@/types";
 import { SupplementaryUpload } from "@/components/supplementary-upload";
 
 type UploadStep = "idle" | "analyzing" | "done" | "error";
@@ -110,6 +110,9 @@ export default function UploadPage() {
   const [supplementaryDocs, setSupplementaryDocs] = useState<SupplementaryDocument[]>([]);
   const [includeSupplementary, setIncludeSupplementary] = useState(false);
 
+  // Per-file error tracking
+  const [fileErrors, setFileErrors] = useState<Map<string, string>>(new Map());
+
   // Session creation state
   const [startingStudy, setStartingStudy] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
@@ -138,36 +141,47 @@ export default function UploadPage() {
   // ── Analysis ─────────────────────────────────────────────────────
   async function handleUpload() {
     if (fileEntries.length === 0) return;
-    const totalBytes = fileEntries.reduce((s, e) => s + e.file.size, 0);
-    setEstimatedSecs(estimateSeconds(totalBytes) * fileEntries.length);
+    // Sum individual estimates (not total bytes * count)
+    setEstimatedSecs(fileEntries.reduce((s, e) => s + estimateSeconds(e.file.size), 0));
     setStep("analyzing");
     setError(null);
+    setFileErrors(new Map());
     const results: FileResult[] = [];
+    const errors = new Map<string, string>();
 
     for (let i = 0; i < fileEntries.length; i++) {
-      const { file, title } = fileEntries[i];
+      const entry = fileEntries[i];
       setCurrentFileIndex(i + 1);
-      setCurrentFileName(file.name);
-      setProgress(Math.round((i / fileEntries.length) * 90));
+      setCurrentFileName(entry.file.name);
 
       const formData = new FormData();
-      formData.append("file", file);
-      formData.append("title", title.trim() || file.name.replace(/\.pdf$/i, ""));
+      formData.append("file", entry.file);
+      formData.append("title", entry.title.trim() || entry.file.name.replace(/\.pdf$/i, ""));
 
-      const res = await fetch("/api/analyze", { method: "POST", body: formData });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setError(`"${file.name}": ${data.error ?? "Analysis failed"}`);
-        setStep("error");
-        return;
+      try {
+        const res = await fetch("/api/analyze", { method: "POST", body: formData });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          errors.set(entry.id, data.error ?? "분석 실패");
+        } else {
+          const data = await res.json();
+          results.push({ documentId: data.document.id, analysis: data.analysis });
+        }
+      } catch {
+        errors.set(entry.id, "네트워크 오류");
       }
-      const data = await res.json();
-      results.push({ documentId: data.document.id, analysis: data.analysis });
     }
 
+    setFileErrors(errors);
     setFileResults(results);
     setProgress(100);
-    setStep("done");
+
+    if (results.length === 0) {
+      setStep("error");
+      setError("모든 PDF 분석에 실패했습니다.");
+    } else {
+      setStep("done");
+    }
   }
 
   // ── Concept helpers ───────────────────────────────────────────────
@@ -339,7 +353,9 @@ export default function UploadPage() {
                   </span>
                   <span>·</span>
                   <span>
-                    예상: ~{Math.max(0, estimatedSecs - elapsed)}초 남음
+                    {elapsed < estimatedSecs
+                      ? `예상: ~${estimatedSecs - elapsed}초 남음`
+                      : "예상보다 오래 걸리고 있어요..."}
                   </span>
                 </div>
               </div>
@@ -350,11 +366,24 @@ export default function UploadPage() {
         {/* ── DONE ── */}
         {step === "done" && fileResults.length > 0 && (
           <div className="space-y-6">
-            <div className="flex items-center gap-3 text-green-600">
-              <CheckCircle2 className="h-6 w-6" />
-              <span className="font-bold text-lg">
-                {fileResults.length} PDF{fileResults.length > 1 ? "s" : ""} analyzed — {t("uploadSuccess")}
-              </span>
+            <div className="space-y-2">
+              <div className="flex items-center gap-3 text-green-600">
+                <CheckCircle2 className="h-6 w-6" />
+                <span className="font-bold text-lg">
+                  {fileResults.length}/{fileEntries.length} PDF{fileEntries.length > 1 ? "s" : ""} analyzed — {t("uploadSuccess")}
+                </span>
+              </div>
+              {fileErrors.size > 0 && (
+                <div className="space-y-1 pl-1">
+                  {fileEntries.filter((e) => fileErrors.has(e.id)).map((entry) => (
+                    <div key={entry.id} className="flex items-center gap-2 text-sm text-destructive">
+                      <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                      <span className="font-medium truncate">{entry.file.name}</span>
+                      <span className="text-xs opacity-75 shrink-0">— {fileErrors.get(entry.id)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Concept selection */}
@@ -377,28 +406,51 @@ export default function UploadPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 {(() => {
-                  const emphasized = new Set(
-                    supplementaryDocs.flatMap((d) =>
-                      (d.insights?.emphasized_topics ?? []).map((t) => t.toLowerCase())
-                    )
-                  );
-                  const isEmphasized = (name: string) =>
-                    emphasized.size > 0 &&
-                    [...emphasized].some(
-                      (e) => name.toLowerCase().includes(e) || e.includes(name.toLowerCase())
-                    );
+                  // Build per-type emphasis maps from supplementary docs
+                  const TYPE_PRIORITY: SupplementaryDocType[] = ["past_exam", "prof_notes", "study_guide", "formula_sheet", "other"];
+                  const docTypeEmphasis = new Map<SupplementaryDocType, Set<string>>();
+                  for (const doc of supplementaryDocs) {
+                    const type = (doc.insights?.doc_type ?? "other") as SupplementaryDocType;
+                    if (!docTypeEmphasis.has(type)) docTypeEmphasis.set(type, new Set());
+                    for (const topic of doc.insights?.emphasized_topics ?? []) {
+                      docTypeEmphasis.get(type)!.add(topic.toLowerCase());
+                    }
+                  }
+
+                  function getEmphasisType(name: string): SupplementaryDocType | null {
+                    for (const type of TYPE_PRIORITY) {
+                      const topics = docTypeEmphasis.get(type);
+                      if (topics?.size && [...topics].some((e) => name.toLowerCase().includes(e) || e.includes(name.toLowerCase()))) {
+                        return type;
+                      }
+                    }
+                    return null;
+                  }
+
+                  const emphasisStyle: Record<SupplementaryDocType, { badge: string; icon: string; label: string }> = {
+                    past_exam:     { badge: "bg-amber-500/10 border-amber-500/50 hover:border-amber-500",   icon: "text-amber-500",  label: "Past Exam 출제 예상" },
+                    prof_notes:    { badge: "bg-purple-500/10 border-purple-500/50 hover:border-purple-500", icon: "text-purple-500", label: "교수 노트 강조" },
+                    study_guide:   { badge: "bg-blue-500/10 border-blue-500/50 hover:border-blue-500",       icon: "text-blue-500",   label: "스터디 가이드 중심" },
+                    formula_sheet: { badge: "bg-green-500/10 border-green-500/50 hover:border-green-500",    icon: "text-green-500",  label: "공식 중점" },
+                    other:         { badge: "bg-muted border-border/60 hover:border-border",                 icon: "text-muted-foreground", label: "보충자료 강조" },
+                  };
 
                   const sorted = [...concepts].sort((a, b) => {
-                    const aE = isEmphasized(a.name) ? 1 : 0;
-                    const bE = isEmphasized(b.name) ? 1 : 0;
+                    const aE = getEmphasisType(a.name) ? 1 : 0;
+                    const bE = getEmphasisType(b.name) ? 1 : 0;
                     return bE - aE || b.frequency - a.frequency;
                   });
 
+                  // Which types are actually present (have emphasized topics)
+                  const presentTypes = TYPE_PRIORITY.filter((t) => (docTypeEmphasis.get(t)?.size ?? 0) > 0);
+
                   return (
+                    <>
                     <div className="flex flex-wrap gap-2">
                       {sorted.map((concept: Concept, i: number) => {
                         const selected = selectedConcepts.has(concept.name);
-                        const examFocus = isEmphasized(concept.name);
+                        const emphType = getEmphasisType(concept.name);
+                        const style = emphType ? emphasisStyle[emphType] : null;
                         return (
                           <button
                             key={i}
@@ -406,12 +458,12 @@ export default function UploadPage() {
                             className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
                               selected
                                 ? "bg-primary text-primary-foreground border-primary"
-                                : examFocus
-                                ? "bg-amber-500/10 border-amber-500/50 text-foreground hover:border-amber-500"
+                                : style
+                                ? `${style.badge} text-foreground`
                                 : "bg-background border-border text-muted-foreground hover:border-primary/50"
                             }`}
                           >
-                            {examFocus && <Star className="h-3 w-3 text-amber-500" />}
+                            {style && <Star className={`h-3 w-3 ${style.icon}`} />}
                             {concept.is_hot && <Flame className="h-3 w-3" />}
                             {concept.is_trap && <AlertTriangle className="h-3 w-3" />}
                             {concept.is_key && <Trophy className="h-3 w-3" />}
@@ -421,17 +473,20 @@ export default function UploadPage() {
                         );
                       })}
                     </div>
-                  );
-                })()}
 
                 <div className="flex gap-4 text-xs text-muted-foreground pt-2 border-t border-border/40 flex-wrap">
-                  {supplementaryDocs.length > 0 && (
-                    <span className="flex items-center gap-1 text-amber-600"><Star className="h-3 w-3" /> Exam focus</span>
-                  )}
+                  {presentTypes.map((type) => (
+                    <span key={type} className={`flex items-center gap-1 ${emphasisStyle[type].icon}`}>
+                      <Star className="h-3 w-3" /> {emphasisStyle[type].label}
+                    </span>
+                  ))}
                   <span className="flex items-center gap-1"><Flame className="h-3 w-3" /> 자주 출제</span>
                   <span className="flex items-center gap-1"><AlertTriangle className="h-3 w-3 text-destructive" /> 자주 틀림</span>
                   <span className="flex items-center gap-1"><Trophy className="h-3 w-3" /> 고득점 핵심</span>
                 </div>
+                    </>
+                  );
+                })()}
 
                 {selectedConcepts.size > 0 && (
                   <p className="text-xs text-primary font-medium">{selectedConcepts.size}개 개념 선택됨</p>
