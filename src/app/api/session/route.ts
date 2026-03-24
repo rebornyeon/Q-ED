@@ -131,6 +131,8 @@ export async function POST(request: NextRequest) {
   const filterProblemTypes: string[] | null = problemTypes?.length > 0 ? problemTypes : null;
   const filterSections: string[] | null = sections?.length > 0 ? sections : null;
 
+  console.log(`[session] START — docIds: ${JSON.stringify(documentIds)}, filters: concepts=${!!filterConcepts}, diff=${!!filterDifficultyRange}, types=${!!filterProblemTypes}, sections=${!!filterSections}, max=${filterMaxProblems}`);
+
   if (documentIds.length === 0) {
     return NextResponse.json({ error: "documentId or documentIds is required" }, { status: 400 });
   }
@@ -142,6 +144,7 @@ export async function POST(request: NextRequest) {
     .eq("user_id", user.id);
 
   if (docError || !documents || documents.length === 0) {
+    console.error(`[session] Documents not found — error: ${docError?.message}`);
     return NextResponse.json({ error: "Documents not found" }, { status: 404 });
   }
 
@@ -166,6 +169,7 @@ export async function POST(request: NextRequest) {
     if (!doc) continue;
     const analysis = doc.analysis as GeminiAnalysisResult;
     sourceProblemsByDocId.set(docId, analysis?.problems ?? []);
+    console.log(`[session] Doc "${doc.title}" — analysis.problems: ${analysis?.problems?.length ?? 0}`);
     for (const p of analysis?.problems ?? []) {
       mainProblems.push({
         content: p.content,
@@ -176,6 +180,7 @@ export async function POST(request: NextRequest) {
       });
     }
   }
+  console.log(`[session] mainProblems: ${mainProblems.length}`);
 
   // Fetch supplementary docs (always — even if not including their problems, need insights for scoring)
   const { data: suppDocs } = await supabase
@@ -211,6 +216,7 @@ export async function POST(request: NextRequest) {
   }
 
   const filteredMain = applyFilter(mainProblems);
+  console.log(`[session] filteredMain: ${filteredMain.length}`);
 
   // Score problems against supplementary (if supplementary exists)
   const hasSupplementary = suppInsights.length > 0 || allSuppProblems.length > 0;
@@ -285,7 +291,9 @@ export async function POST(request: NextRequest) {
     })),
   ];
 
+  console.log(`[session] allProblemsToInsert: ${allProblemsToInsert.length}`);
   if (allProblemsToInsert.length === 0) {
+    console.log(`[session] EARLY RETURN — no problems to insert`);
     return NextResponse.json({ session, problems: [] });
   }
 
