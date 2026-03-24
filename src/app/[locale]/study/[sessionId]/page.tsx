@@ -69,6 +69,7 @@ export default function StudySessionPage({
   const [suppOpen, setSuppOpen] = useState(false);
   const [documentId, setDocumentId] = useState<string | null>(null);
   const [documentTitle, setDocumentTitle] = useState<string | null>(null);
+  const [sessionTitle, setSessionTitle] = useState<string | null>(null);
   const [documentFilePath, setDocumentFilePath] = useState<string | null>(null);
   const [pdfPageOpen, setPdfPageOpen] = useState(false);
   const [generatingNoteFor, setGeneratingNoteFor] = useState<string | null>(null);
@@ -198,6 +199,7 @@ export default function StudySessionPage({
       const docs = (sessionData as any).documents;
       if (docs?.title) setDocumentTitle(docs.title);
       if (docs?.file_path) setDocumentFilePath(docs.file_path);
+      if (sessionData.title) setSessionTitle(sessionData.title);
       setLoading(false);
     }
     load();
@@ -615,6 +617,11 @@ export default function StudySessionPage({
             <span className="text-sm font-bold tabular-nums text-foreground">
               {currentProblemIndex + 1}<span className="text-muted-foreground font-normal">/{problems.length}</span>
             </span>
+            {sessionTitle && (
+              <span className="hidden sm:inline text-xs text-muted-foreground font-medium truncate max-w-[180px]">
+                {sessionTitle}
+              </span>
+            )}
             {/* Progress mini-map: colored dots for each problem */}
             <div className="relative group">
               <Progress value={progressPercent} className="w-24 h-1.5 cursor-pointer" />
@@ -742,6 +749,34 @@ export default function StudySessionPage({
                       </p>
                     </SheetHeader>
                     <div className="p-4 space-y-5">
+                      {/* Exam likelihood — shown first when scoring data exists */}
+                      {hasExamScoring && (
+                        <div className="space-y-2">
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Exam Likelihood</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {([
+                              { label: "All", value: null },
+                              { label: "≥3 Likely", value: 3 },
+                              { label: "≥4 High", value: 4 },
+                              { label: "5 Must-Do", value: 5 },
+                            ] as { label: string; value: number | null }[]).map(({ label, value }) => (
+                              <button
+                                key={label}
+                                onClick={() => setNsMinExamLikelihood(value)}
+                                className={`text-xs font-medium px-3 py-1 rounded-full border transition-all ${
+                                  nsMinExamLikelihood === value
+                                    ? "bg-red-500 text-white border-red-500"
+                                    : "bg-muted/40 text-muted-foreground border-border/50 hover:border-border"
+                                }`}
+                              >
+                                {value !== null ? "●".repeat(value) + " " : ""}{label}
+                              </button>
+                            ))}
+                          </div>
+                          <p className="text-xs text-muted-foreground">Based on supplementary materials scoring</p>
+                        </div>
+                      )}
+
                       {/* Max problems */}
                       <div className="space-y-2">
                         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Problem limit</p>
@@ -868,34 +903,6 @@ export default function StudySessionPage({
                             ))}
                           </div>
                           {nsConcepts.size === 0 && <p className="text-xs text-muted-foreground">None selected = all concepts</p>}
-                        </div>
-                      )}
-
-                      {/* Exam likelihood */}
-                      {hasExamScoring && (
-                        <div className="space-y-2">
-                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Exam Likelihood</p>
-                          <div className="flex flex-wrap gap-1.5">
-                            {([
-                              { label: "All", value: null },
-                              { label: "≥3 Likely", value: 3 },
-                              { label: "≥4 High", value: 4 },
-                              { label: "5 Must-Do", value: 5 },
-                            ] as { label: string; value: number | null }[]).map(({ label, value }) => (
-                              <button
-                                key={label}
-                                onClick={() => setNsMinExamLikelihood(value)}
-                                className={`text-xs font-medium px-3 py-1 rounded-full border transition-all ${
-                                  nsMinExamLikelihood === value
-                                    ? "bg-red-500 text-white border-red-500"
-                                    : "bg-muted/40 text-muted-foreground border-border/50 hover:border-border"
-                                }`}
-                              >
-                                {value !== null ? "●".repeat(value) + " " : ""}{label}
-                              </button>
-                            ))}
-                          </div>
-                          <p className="text-xs text-muted-foreground">Based on supplementary materials scoring</p>
                         </div>
                       )}
 

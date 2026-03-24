@@ -148,9 +148,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Documents not found" }, { status: 404 });
   }
 
+  // Auto-version session title: "Calculus", "Calculus v2", "Calculus v3", ...
+  const primaryDoc = documents.find((d) => d.id === primaryDocId);
+  const baseTitle = primaryDoc?.title ?? "Study Session";
+  const { count: existingCount } = await supabase
+    .from("study_sessions")
+    .select("id", { count: "exact", head: true })
+    .eq("document_id", primaryDocId)
+    .eq("user_id", user.id);
+  const sessionTitle = (existingCount ?? 0) > 0
+    ? `${baseTitle} v${(existingCount ?? 0) + 1}`
+    : baseTitle;
+
   const { data: session, error: sessionError } = await supabase
     .from("study_sessions")
-    .insert({ user_id: user.id, document_id: primaryDocId, status: "active" })
+    .insert({ user_id: user.id, document_id: primaryDocId, status: "active", title: sessionTitle })
     .select()
     .single();
 
