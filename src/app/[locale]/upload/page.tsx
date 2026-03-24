@@ -34,10 +34,19 @@ const PHASES = [
 import type { Concept, SupplementaryDocument, GeminiAnalysisResult, SupplementaryDocType } from "@/types";
 import { SupplementaryUpload } from "@/components/supplementary-upload";
 
-type UploadStep = "idle" | "analyzing" | "done" | "error";
+type UploadStep = "idle" | "scanning" | "selecting" | "analyzing" | "done" | "error";
 
 type FileEntry = { id: string; file: File; title: string };
 type FileResult = { documentId: string; analysis: GeminiAnalysisResult };
+
+type TOCChapter = { name: string; startPage: number; endPage: number; pageCount: number };
+type FileTOCData = {
+  fileId: string;
+  totalPages: number;
+  chapters: TOCChapter[];
+  maxSelectableChapters: number;
+  selectedIndices: Set<number>;
+};
 
 function mergeAnalyses(results: FileResult[]): { concepts: Concept[]; totalProblems: number } {
   const conceptMap = new Map<string, Concept>();
@@ -105,6 +114,9 @@ export default function UploadPage() {
   // Results state
   const [fileResults, setFileResults] = useState<FileResult[]>([]);
 
+  // Chapter selection state (for large PDFs)
+  const [tocDataMap, setTocDataMap] = useState<Map<string, FileTOCData>>(new Map());
+
   // Concept + supplementary state
   const [selectedConcepts, setSelectedConcepts] = useState<Set<string>>(new Set());
   const [supplementaryDocs, setSupplementaryDocs] = useState<SupplementaryDocument[]>([]);
@@ -138,14 +150,55 @@ export default function UploadPage() {
     setFileEntries((prev) => prev.map((e) => (e.id === id ? { ...e, title } : e)));
   }
 
-  // ── Analysis ─────────────────────────────────────────────────────
+  // ── TOC scan then chapter selection (for large PDFs) ─────────────
   async function handleUpload() {
     if (fileEntries.length === 0) return;
-    // Sum individual estimates (not total bytes * count)
-    setEstimatedSecs(fileEntries.reduce((s, e) => s + estimateSeconds(e.file.size), 0));
-    setStep("analyzing");
     setError(null);
     setFileErrors(new Map());
+
+    // Scan TOC for each file to check if chapter selection is needed
+    setStep("scanning");
+    const tocResults = await Promise.all(
+      fileEntries.map(async (entry) => {
+        const fd = new FormData();
+        fd.append("file", entry.file);
+        try {
+          const res = await fetch("/api/toc", { method: "POST", body: fd });
+          if (res.ok) return { fileId: entry.id, ...(await res.json()) };
+        } catch { /* ignore, proceed without TOC */ }
+        return null;
+      })
+    );
+
+    // Build TOC map for files that need chapter selection
+    const newTocMap = new Map<string, FileTOCData>();
+    let anyNeedsSelection = false;
+    for (const toc of tocResults) {
+      if (toc && toc.needsSelection) {
+        newTocMap.set(toc.fileId, {
+          fileId: toc.fileId,
+          totalPages: toc.totalPages,
+          chapters: toc.chapters,
+          maxSelectableChapters: toc.maxSelectableChapters,
+          selectedIndices: new Set(),
+        });
+        anyNeedsSelection = true;
+      }
+    }
+
+    if (anyNeedsSelection) {
+      setTocDataMap(newTocMap);
+      setStep("selecting");
+    } else {
+      // No large PDFs — go straight to analysis
+      await runAnalysis(new Map());
+    }
+  }
+
+  // ── Analysis (called after chapter selection or directly) ─────────
+  async function runAnalysis(tocMap: Map<string, FileTOCData>) {
+    setEstimatedSecs(fileEntries.reduce((s, e) => s + estimateSeconds(e.file.size), 0));
+    setStep("analyzing");
     const results: FileResult[] = [];
     const errors = new Map<string, string>();
 
@@ -157,6 +210,14 @@ export default function UploadPage() {
       const formData = new FormData();
       formData.append("file", entry.file);
       formData.append("title", entry.title.trim() || entry.file.name.replace(/\.pdf$/i, ""));
+
+      // Attach selected page ranges if chapter selection was done for this file
+      const tocData = tocMap.get(entry.id);
+      if (tocData && tocData.selectedIndices.size > 0) {
+        const ranges = Array.from(tocData.selectedIndices)
+          .map((idx) => ({ start: tocData.chapters[idx].startPage, end: tocData.chapters[idx].endPage }));
+        formData.append("selectedPageRanges", JSON.stringify(ranges));
+      }
 
       try {
         const res = await fetch("/api/analyze", { method: "POST", body: formData });
@@ -182,6 +243,30 @@ export default function UploadPage() {
     } else {
       setStep("done");
     }
+  }
+
+  // ── Chapter selection helpers ─────────────────────────────────────
+  function toggleChapter(fileId: string, chapterIdx: number) {
+    setTocDataMap((prev) => {
+      const next = new Map(prev);
+      const data = next.get(fileId);
+      if (!data) return prev;
+      const sel = new Set(data.selectedIndices);
+      if (sel.has(chapterIdx)) {
+        sel.delete(chapterIdx);
+      } else if (sel.size < data.maxSelectableChapters) {
+        sel.add(chapterIdx);
+      }
+      next.set(fileId, { ...data, selectedIndices: sel });
+      return next;
+    });
+  }
+
+  function allChaptersSelected() {
+    for (const data of tocDataMap.values()) {
+      if (data.selectedIndices.size === 0) return false;
+    }
+    return tocDataMap.size > 0;
   }
 
   // ── Concept helpers ───────────────────────────────────────────────
@@ -331,6 +416,79 @@ export default function UploadPage() {
             >
               {t("analyzeButton")} {fileEntries.length > 1 ? `(${fileEntries.length} PDFs)` : ""}
             </Button>
+          </div>
+        )}
+
+        {/* ── SCANNING (quick TOC scan) ── */}
+        {step === "scanning" && (
+          <Card>
+            <CardContent className="pt-8 pb-8 text-center space-y-5">
+              <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto" />
+              <div>
+                <p className="font-bold text-lg">Scanning table of contents...</p>
+                <p className="text-sm text-muted-foreground mt-1">Detecting chapter structure (~5–10 seconds)</p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ── CHAPTER SELECTION ── */}
+        {step === "selecting" && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-xl font-bold">Select chapters to study</h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                This textbook is large. Select the chapters you want to analyze to stay within the ~150-page analysis budget.
+              </p>
+            </div>
+            {Array.from(tocDataMap.values()).map((data) => {
+              const entry = fileEntries.find((e) => e.id === data.fileId);
+              return (
+                <Card key={data.fileId}>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">{entry?.title || entry?.file.name}</CardTitle>
+                    <p className="text-xs text-muted-foreground">
+                      {data.totalPages} pages total · Select up to <span className="font-semibold text-foreground">{data.maxSelectableChapters}</span> chapter{data.maxSelectableChapters > 1 ? "s" : ""}
+                      {" "}· {data.selectedIndices.size}/{data.maxSelectableChapters} selected
+                    </p>
+                  </CardHeader>
+                  <CardContent className="space-y-1.5">
+                    {data.chapters.map((ch, idx) => {
+                      const isSelected = data.selectedIndices.has(idx);
+                      const isDisabled = !isSelected && data.selectedIndices.size >= data.maxSelectableChapters;
+                      return (
+                        <button
+                          key={idx}
+                          onClick={() => toggleChapter(data.fileId, idx)}
+                          disabled={isDisabled}
+                          className={`w-full text-left flex items-center justify-between px-3 py-2 rounded-lg border text-sm transition-all ${
+                            isSelected
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : isDisabled
+                              ? "opacity-40 cursor-not-allowed bg-muted/20 border-border/30 text-muted-foreground"
+                              : "bg-muted/30 border-border/50 hover:border-primary/50 text-foreground"
+                          }`}
+                        >
+                          <span className="font-medium truncate mr-2">{ch.name}</span>
+                          <span className="text-xs shrink-0 opacity-70">{ch.pageCount} pp.</span>
+                        </button>
+                      );
+                    })}
+                  </CardContent>
+                </Card>
+              );
+            })}
+            <Button
+              className="w-full"
+              size="lg"
+              onClick={() => runAnalysis(tocDataMap)}
+              disabled={!allChaptersSelected()}
+            >
+              Analyze selected chapters
+            </Button>
+            <p className="text-xs text-center text-muted-foreground -mt-3">
+              Each selected chapter will be fully analyzed for problems and concepts.
+            </p>
           </div>
         )}
 

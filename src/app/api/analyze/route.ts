@@ -15,6 +15,10 @@ export async function POST(request: NextRequest) {
   const formData = await request.formData();
   const file = formData.get("file") as File;
   const title = formData.get("title") as string;
+  const pageRangesRaw = formData.get("selectedPageRanges") as string | null;
+  const selectedPageRanges: { start: number; end: number }[] | undefined = pageRangesRaw
+    ? JSON.parse(pageRangesRaw)
+    : undefined;
 
   if (!file || !title) {
     return NextResponse.json({ error: "File and title are required" }, { status: 400 });
@@ -42,9 +46,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Failed to upload file" }, { status: 500 });
   }
 
-  // Analyze with Gemini
+  // Analyze with Gemini (only selected page ranges if provided)
   const base64 = buffer.toString("base64");
-  const analysis = await analyzePDF(base64);
+  const analysis = await analyzePDF(base64, selectedPageRanges);
 
   // Save document to DB
   const { data: document, error: dbError } = await supabase

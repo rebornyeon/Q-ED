@@ -106,6 +106,7 @@ export default function StudySessionPage({
   const [nsTypes, setNsTypes] = useState<Set<string>>(new Set());
   const [nsSections, setNsSections] = useState<Set<string>>(new Set());
   const [nsConcepts, setNsConcepts] = useState<Set<string>>(new Set());
+  const [nsMinExamLikelihood, setNsMinExamLikelihood] = useState<number | null>(null);
   const [creatingNewSession, setCreatingNewSession] = useState(false);
 
   // Supplementary docs added in this session (to enable "새 세션" shortcut)
@@ -300,6 +301,7 @@ export default function StudySessionPage({
           difficultyRange: nsDifficulty,
           problemTypes: nsTypes.size > 0 ? Array.from(nsTypes) : null,
           sections: nsSections.size > 0 ? Array.from(nsSections) : null,
+          minExamLikelihood: nsMinExamLikelihood,
         }),
       });
       if (res.ok) {
@@ -591,6 +593,7 @@ export default function StudySessionPage({
   const allSessionConcepts = Array.from(new Set(problems.flatMap((p) => p.concepts))).sort();
   const allSessionTypes = Array.from(new Set(problems.map((p) => p.problem_type).filter((t): t is string => Boolean(t)))).sort();
   const allSessionSections = Array.from(new Set(problems.map((p) => p.section).filter((s): s is string => Boolean(s)))).sort();
+  const hasExamScoring = problems.some((p) => p.exam_likelihood != null && p.exam_likelihood > 0);
 
   // Build question list groups (outside JSX to avoid IIFE parser issues)
   const sectionOrder: string[] = [];
@@ -868,6 +871,34 @@ export default function StudySessionPage({
                         </div>
                       )}
 
+                      {/* Exam likelihood */}
+                      {hasExamScoring && (
+                        <div className="space-y-2">
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Exam Likelihood</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {([
+                              { label: "All", value: null },
+                              { label: "≥3 Likely", value: 3 },
+                              { label: "≥4 High", value: 4 },
+                              { label: "5 Must-Do", value: 5 },
+                            ] as { label: string; value: number | null }[]).map(({ label, value }) => (
+                              <button
+                                key={label}
+                                onClick={() => setNsMinExamLikelihood(value)}
+                                className={`text-xs font-medium px-3 py-1 rounded-full border transition-all ${
+                                  nsMinExamLikelihood === value
+                                    ? "bg-red-500 text-white border-red-500"
+                                    : "bg-muted/40 text-muted-foreground border-border/50 hover:border-border"
+                                }`}
+                              >
+                                {value !== null ? "●".repeat(value) + " " : ""}{label}
+                              </button>
+                            ))}
+                          </div>
+                          <p className="text-xs text-muted-foreground">Based on supplementary materials scoring</p>
+                        </div>
+                      )}
+
                       <Button
                         className="w-full"
                         onClick={() => createNewSession()}
@@ -875,7 +906,7 @@ export default function StudySessionPage({
                       >
                         {creatingNewSession
                           ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Creating session...</>
-                          : `🚀 Start — ${nsMaxProblems ? `${nsMaxProblems} problems` : "All problems"}${nsSections.size > 0 ? ` · ${nsSections.size} chapter${nsSections.size > 1 ? "s" : ""}` : ""}${nsConcepts.size > 0 ? ` · ${nsConcepts.size} concept${nsConcepts.size > 1 ? "s" : ""}` : ""}`
+                          : `🚀 Start — ${nsMaxProblems ? `${nsMaxProblems} problems` : "All problems"}${nsSections.size > 0 ? ` · ${nsSections.size} chapter${nsSections.size > 1 ? "s" : ""}` : ""}${nsConcepts.size > 0 ? ` · ${nsConcepts.size} concept${nsConcepts.size > 1 ? "s" : ""}` : ""}${nsMinExamLikelihood ? ` · ≥${nsMinExamLikelihood} exam` : ""}`
                         }
                       </Button>
                     </div>

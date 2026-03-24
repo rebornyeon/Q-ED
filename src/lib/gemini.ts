@@ -134,6 +134,87 @@ async function splitPDFIntoChunks(base64Data: string): Promise<string[]> {
   return chunks;
 }
 
+// Chunk only specific page ranges (1-based) into PAGES_PER_CHUNK groups
+async function splitPDFPageRanges(
+  base64Data: string,
+  ranges: { start: number; end: number }[]
+): Promise<string[]> {
+  const pdfBytes = Buffer.from(base64Data, "base64");
+  const srcDoc = await PDFDocument.load(pdfBytes);
+  const totalPages = srcDoc.getPageCount();
+
+  // Collect 0-based indices from selected ranges, deduplicated and sorted
+  const indexSet = new Set<number>();
+  for (const { start, end } of ranges) {
+    for (let p = start; p <= end; p++) {
+      const idx = p - 1;
+      if (idx >= 0 && idx < totalPages) indexSet.add(idx);
+    }
+  }
+  const indices = Array.from(indexSet).sort((a, b) => a - b);
+
+  const chunks: string[] = [];
+  for (let i = 0; i < indices.length; i += PAGES_PER_CHUNK) {
+    const batch = indices.slice(i, i + PAGES_PER_CHUNK);
+    const chunkDoc = await PDFDocument.create();
+    const copied = await chunkDoc.copyPages(srcDoc, batch);
+    copied.forEach((p) => chunkDoc.addPage(p));
+    chunks.push(Buffer.from(await chunkDoc.save()).toString("base64"));
+  }
+  return chunks;
+}
+
+export type TOCChapter = { name: string; startPage: number; endPage: number };
+
+// Quick TOC extraction from the first ~15 pages of a PDF
+export async function extractTOC(
+  base64Data: string
+): Promise<{ totalPages: number; chapters: TOCChapter[] }> {
+  const pdfBytes = Buffer.from(base64Data, "base64");
+  const srcDoc = await PDFDocument.load(pdfBytes);
+  const totalPages = srcDoc.getPageCount();
+
+  // Only scan first 15 pages (where TOC/preface usually appears)
+  const previewCount = Math.min(totalPages, 15);
+  const previewDoc = await PDFDocument.create();
+  const previewPages = await previewDoc.copyPages(
+    srcDoc,
+    Array.from({ length: previewCount }, (_, i) => i)
+  );
+  previewPages.forEach((p) => previewDoc.addPage(p));
+  const previewBase64 = Buffer.from(await previewDoc.save()).toString("base64");
+
+  const model = getJsonModel();
+  const prompt = `Analyze the table of contents or chapter structure of this textbook PDF (${totalPages} pages total). Return JSON only.
+
+{"chapters":[{"name":"Chapter 1: Introduction","startPage":1,"endPage":45}]}
+
+Rules:
+- Detect top-level chapters only (not sub-sections). Include all chapters visible in the TOC.
+- startPage and endPage are 1-based page numbers in the FULL ${totalPages}-page document.
+- If the TOC shows page numbers, use them directly. If the TOC page numbers don't match PDF page numbers (e.g., Roman numeral preface pages), adjust: PDF page = TOC page + offset.
+- For the last chapter: set endPage to ${totalPages}.
+- If no TOC is found, return {"chapters":[]}.`;
+
+  try {
+    const result = await model.generateContent([
+      { inlineData: { data: previewBase64, mimeType: "application/pdf" } },
+      prompt,
+    ]);
+    const parsed = parseGeminiJson<{ chapters: TOCChapter[] }>(result.response.text());
+    const chapters = (parsed.chapters ?? []).filter(
+      (c) => c.name && typeof c.startPage === "number" && typeof c.endPage === "number"
+    );
+    // Fix last chapter endPage
+    if (chapters.length > 0) {
+      chapters[chapters.length - 1].endPage = totalPages;
+    }
+    return { totalPages, chapters };
+  } catch {
+    return { totalPages, chapters: [] };
+  }
+}
+
 type RawExtractedProblem = { content: string; problem_type: string; difficulty: number; concepts: string[]; section: string | null; page: number | null; problem_number: string | null };
 
 // Normalize extracted problems: ensure concepts is always an array, content is a string, etc.
@@ -386,9 +467,14 @@ async function processChunksParallel(
 }
 
 // 메인: PDF 청크 분할 → 문제 추출 (Cue는 on-demand 생성으로 이동)
-export async function analyzePDF(base64Data: string): Promise<GeminiAnalysisResult> {
-  // 1단계: PDF를 청크로 분할
-  const chunks = await splitPDFIntoChunks(base64Data);
+export async function analyzePDF(
+  base64Data: string,
+  selectedPageRanges?: { start: number; end: number }[]
+): Promise<GeminiAnalysisResult> {
+  // 1단계: PDF를 청크로 분할 (선택된 페이지 범위만, 또는 전체)
+  const chunks = selectedPageRanges && selectedPageRanges.length > 0
+    ? await splitPDFPageRanges(base64Data, selectedPageRanges)
+    : await splitPDFIntoChunks(base64Data);
 
   // 2단계: 청크 병렬 처리 (최대 CHUNK_CONCURRENCY개 동시)
   const chunkResults = await processChunksParallel(chunks, CHUNK_CONCURRENCY);

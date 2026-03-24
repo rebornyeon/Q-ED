@@ -122,6 +122,7 @@ export async function POST(request: NextRequest) {
     difficultyRange,
     problemTypes,
     sections,
+    minExamLikelihood,
   } = await request.json();
   const documentIds: string[] = multiDocIds ?? (singleDocId ? [singleDocId] : []);
   const primaryDocId = documentIds[0];
@@ -130,6 +131,7 @@ export async function POST(request: NextRequest) {
   const filterDifficultyRange: [number, number] | null = difficultyRange ?? null;
   const filterProblemTypes: string[] | null = problemTypes?.length > 0 ? problemTypes : null;
   const filterSections: string[] | null = sections?.length > 0 ? sections : null;
+  const filterMinExamLikelihood: number | null = minExamLikelihood ?? null;
 
 
   if (documentIds.length === 0) {
@@ -219,8 +221,13 @@ export async function POST(request: NextRequest) {
     ? scoreProblems(filteredMain, suppInsights, allSuppProblems)
     : filteredMain.map(() => ({ exam_likelihood: null, is_exam_overlap: null }));
 
+  // Apply exam likelihood filter (only meaningful when supplementary scoring exists)
+  const scoredMain = filteredMain.map((p, i) => ({ p, i, score: scores[i] }));
+  const indexedMain = filterMinExamLikelihood
+    ? scoredMain.filter((x) => x.score.exam_likelihood == null || x.score.exam_likelihood >= filterMinExamLikelihood)
+    : scoredMain;
+
   // Sort by exam_likelihood descending WITHIN each section
-  const indexedMain = filteredMain.map((p, i) => ({ p, i, score: scores[i] }));
   const sectionGroups = new Map<string, typeof indexedMain>();
   for (const item of indexedMain) {
     const key = item.p.section ?? "__none__";
