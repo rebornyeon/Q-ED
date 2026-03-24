@@ -38,7 +38,7 @@ export function SupplementaryUpload({ documentId, initialDocs = [], onDocsChange
     const pages = Math.max(1, Math.round(bytes / 75000));
     const chunks = Math.ceil(pages / 8);
     const batches = Math.ceil(chunks / 3);
-    return Math.max(15, batches * 25 + 10);
+    return Math.max(30, batches * 45 + 20);
   }
 
   async function uploadFile(file: File) {

@@ -16,12 +16,13 @@ import {
 
 // Estimate pages from file size (~75KB per page average)
 function estimatePages(bytes: number) { return Math.max(1, Math.round(bytes / 75000)); }
-// Estimate seconds per file: chunks ceil(pages/8) processed in groups of 3, ~25s per batch + overhead
+// Estimate seconds per file: chunks ceil(pages/8) processed in groups of 3, ~45s per batch + overhead
+// Intentionally overestimated so "almost done" feeling is better than "overdue"
 function estimateSeconds(bytes: number) {
   const pages = estimatePages(bytes);
   const chunks = Math.ceil(pages / 8);
   const batches = Math.ceil(chunks / 3);
-  return Math.max(15, batches * 25 + 10);
+  return Math.max(30, batches * 45 + 20);
 }
 
 const PHASES = [
@@ -513,11 +514,7 @@ export default function UploadPage() {
                     경과: {elapsed}초
                   </span>
                   <span>·</span>
-                  <span>
-                    {elapsed < estimatedSecs
-                      ? `예상: ~${estimatedSecs - elapsed}초 남음`
-                      : "예상보다 오래 걸리고 있어요..."}
-                  </span>
+                  <span>예상: ~{Math.max(0, estimatedSecs - elapsed)}초 남음</span>
                 </div>
               </div>
             </CardContent>
