@@ -118,6 +118,7 @@ export default function StudySessionPage({
   const [askLoading, setAskLoading] = useState(false);
   const [askHistory, setAskHistory] = useState<{ q: string; a: string; img?: string }[]>([]);
   const [askExpanded, setAskExpanded] = useState<Set<number>>(new Set());
+  const [askRevealedChunks, setAskRevealedChunks] = useState<Map<number, number>>(new Map());
   const [askImage, setAskImage] = useState<{ base64: string; mimeType: string; preview: string } | null>(null);
   const askInputRef = useRef<HTMLTextAreaElement>(null);
   const askImageInputRef = useRef<HTMLInputElement>(null);
@@ -472,6 +473,11 @@ export default function StudySessionPage({
         setAskHistory((prev) => {
           const newIdx = prev.length;
           setAskExpanded(new Set([newIdx]));
+          setAskRevealedChunks((prevChunks) => {
+            const next = new Map(prevChunks);
+            next.set(newIdx, 1); // start with first chunk only
+            return next;
+          });
           return [...prev, { q: q || "📷 Image", a: data.answer, img: imgSnapshot?.preview }];
         });
       }
@@ -1279,14 +1285,40 @@ export default function StudySessionPage({
                         <p className="text-sm text-foreground whitespace-pre-wrap">{item.q}</p>
                         <div className="flex gap-2">
                           <span className="text-xs font-bold text-green-600 shrink-0 mt-0.5">A:</span>
-                          <div className="flex-1 min-w-0">
-                            <MathContent className="text-sm leading-relaxed select-text">{item.a}</MathContent>
-                            <button
-                              onClick={() => navigator.clipboard.writeText(item.a)}
-                              className="mt-1.5 text-[10px] text-muted-foreground/50 hover:text-muted-foreground transition-colors"
-                            >
-                              Copy answer
-                            </button>
+                          <div className="flex-1 min-w-0 space-y-2">
+                            {(() => {
+                              const chunks = item.a.split(/\n---\n/).map((s: string) => s.trim()).filter(Boolean);
+                              const revealed = askRevealedChunks.get(i) ?? chunks.length;
+                              const visibleChunks = chunks.slice(0, revealed);
+                              return (
+                                <>
+                                  {visibleChunks.map((chunk: string, ci: number) => (
+                                    <MathContent key={ci} className="text-sm leading-relaxed select-text">{chunk}</MathContent>
+                                  ))}
+                                  {revealed < chunks.length && (
+                                    <button
+                                      onClick={() => setAskRevealedChunks((prev) => {
+                                        const next = new Map(prev);
+                                        next.set(i, revealed + 1);
+                                        return next;
+                                      })}
+                                      className="text-xs font-semibold text-primary hover:text-primary/80 transition-colors flex items-center gap-1"
+                                    >
+                                      Next →
+                                      <span className="text-[10px] text-muted-foreground font-normal">({chunks.length - revealed} more)</span>
+                                    </button>
+                                  )}
+                                  {revealed >= chunks.length && (
+                                    <button
+                                      onClick={() => navigator.clipboard.writeText(item.a)}
+                                      className="mt-1 text-[10px] text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+                                    >
+                                      Copy answer
+                                    </button>
+                                  )}
+                                </>
+                              );
+                            })()}
                           </div>
                         </div>
                       </div>

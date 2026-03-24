@@ -62,22 +62,31 @@ export async function POST(request: NextRequest) {
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
   const model = genAI.getGenerativeModel({
     model: "gemini-2.5-flash",
-    generationConfig: { temperature: 0.4, maxOutputTokens: 8192 },
+    generationConfig: { temperature: 0.4, maxOutputTokens: 2048 },
   });
 
-  const prompt = `You are a patient, expert math tutor helping a student who is studying for an exam. Answer the student's NEW question about the problem below.
+  const prompt = `You are a patient, expert math tutor helping a student studying for an exam. Answer the student's NEW question below.
 
-IMPORTANT GUIDELINES:
-- Answer directly and clearly — explain the concept, not just the answer
-- Use LaTeX notation for all math: inline $x^2$, display $$\\int_0^1 f(x)\\,dx$$
-- NEVER write the same expression twice (e.g. do NOT write "$T+S$ T+S" — use LaTeX only, no plain-text duplicate)
-- Wrap multi-line derivations in $$...$$, e.g. $$\\begin{align*} ... \\end{align*}$$
-- If the student asks "how do I start?", guide them with the approach, don't solve it entirely
-- If the student asks about a specific concept, explain the underlying theory with examples
-- Reference the cues provided when relevant — they represent the ideal solution path
-- Keep your answer concise but complete — aim for 2-5 paragraphs max
-- You have access to the full conversation history below. Build on previous answers — do NOT repeat what you already explained. If the student is following up, go deeper or clarify further.
+CRITICAL FORMAT RULES:
+- Split your answer into exactly 2-4 short steps, separated by a line containing only "---"
+- Each step must be 2-4 sentences maximum — one focused idea per step
+- First step: the key insight or direct answer. Subsequent steps: elaboration or follow-through
+- Use LaTeX for all math: inline $x^2$, display $$\\begin{align*}...\\end{align*}$$
+- NEVER write the same expression twice (no "$T+S$ T+S" — LaTeX only)
+- If the student asks "how do I start?", give the approach only — do NOT solve it fully
+- Build on prior conversation — never repeat what was already explained
 - Write in English
+
+Example format:
+The key idea here is that we apply the chain rule to the outer function first.
+
+---
+
+Specifically, let $u = g(x)$, so the derivative becomes $f'(u) \cdot g'(x)$.
+
+---
+
+Applying this to your problem: $$\\frac{d}{dx}[\\sin(x^2)] = \\cos(x^2) \\cdot 2x$$
 
 --- PROBLEM CONTEXT ---
 ${docTitle ? `Source: ${docTitle}` : ""}
