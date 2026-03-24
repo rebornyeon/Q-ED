@@ -260,13 +260,6 @@ export async function POST(request: NextRequest) {
   }
   const filteredSupp = applyFilter(suppRawProblems);
 
-  // Test whether page/problem_number columns exist yet
-  const { error: colCheck } = await supabase
-    .from("problems")
-    .select("page")
-    .limit(0);
-  const hasPageCol = !colCheck;
-
   const allProblemsToInsert = [
     ...sortedMain.map(({ p, score }) => ({
       session_id: session.id,
@@ -276,7 +269,8 @@ export async function POST(request: NextRequest) {
       difficulty: p.difficulty,
       concepts: p.concepts,
       section: p.section ?? null,
-      ...(hasPageCol ? { page: p.page ?? null, problem_number: p.problem_number ?? null } : {}),
+      page: p.page ?? null,
+      problem_number: p.problem_number ?? null,
       exam_likelihood: score.exam_likelihood,
       is_exam_overlap: score.is_exam_overlap,
     })),
