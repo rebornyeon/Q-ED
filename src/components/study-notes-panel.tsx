@@ -177,7 +177,7 @@ export function StudyNotesPanel({ sessionId, generatingNoteFor, onNoteGenerated 
           <Loader2 className="h-3 w-3 animate-spin text-primary" />
         )}
       </SheetTrigger>
-      <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto p-0">
+      <SheetContent side="right" className="w-full sm:max-w-xl overflow-y-auto p-0">
         <SheetHeader className="p-4 border-b border-border sticky top-0 bg-background z-10">
           <div className="flex items-center justify-between">
             <SheetTitle>Study Notes</SheetTitle>
@@ -224,9 +224,9 @@ export function StudyNotesPanel({ sessionId, generatingNoteFor, onNoteGenerated 
                 autoFocus
               />
               <textarea
-                className="w-full text-sm bg-transparent border border-border/60 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary resize-none placeholder:text-muted-foreground/50"
+                className="w-full text-sm bg-transparent border border-border/60 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary resize-y min-h-[120px] placeholder:text-muted-foreground/50"
                 placeholder="Note content... (supports LaTeX: $...$)"
-                rows={4}
+                rows={6}
                 value={newContent}
                 onChange={(e) => setNewContent(e.target.value)}
               />
@@ -307,8 +307,8 @@ export function StudyNotesPanel({ sessionId, generatingNoteFor, onNoteGenerated 
                 <div>
                   <p className="text-blue-600 text-xs font-semibold mb-1">My Notes</p>
                   <textarea
-                    className="w-full text-sm text-blue-700 dark:text-blue-400 placeholder:text-blue-300 border border-blue-200 dark:border-blue-800 rounded-lg px-3 py-2 bg-blue-50 dark:bg-blue-950/30 focus:outline-none focus:ring-1 focus:ring-blue-400 resize-none"
-                    rows={3}
+                    className="w-full text-sm text-blue-700 dark:text-blue-400 placeholder:text-blue-300 border border-blue-200 dark:border-blue-800 rounded-lg px-3 py-2 bg-blue-50 dark:bg-blue-950/30 focus:outline-none focus:ring-1 focus:ring-blue-400 resize-y min-h-[120px]"
+                    rows={6}
                     placeholder="Add your own notes here..."
                     value={draftValue}
                     onChange={(e) => handleUserNoteChange(note.id, e.target.value)}
