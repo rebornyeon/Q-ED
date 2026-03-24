@@ -20,6 +20,18 @@
   font-size: 1em;
 }
 
+/* Problem hero card — more breathing room around display math */
+.problem-math .katex-display {
+  margin: 1.1em auto;
+  overflow-x: auto;
+}
+.problem-math p {
+  margin: 0 0 0.7em 0;
+}
+.problem-math p:last-child {
+  margin-bottom: 0;
+}
+
 body {
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }

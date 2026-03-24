@@ -117,17 +117,18 @@ export function StudyNotesPanel({ sessionId, generatingNoteFor, onNoteGenerated 
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"><\/script>
   <style>
     * { box-sizing: border-box; }
-    body { font-family: "Georgia", serif; max-width: 780px; margin: 0 auto; padding: 32px 24px; color: #111; }
-    h1 { font-size: 24px; font-weight: bold; margin-bottom: 24px; border-bottom: 2px solid #111; padding-bottom: 8px; }
-    .note-card { page-break-inside: avoid; margin-bottom: 28px; border: 1px solid #ddd; border-radius: 10px; padding: 20px; }
-    .note-header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
-    .note-title { font-size: 16px; font-weight: bold; }
-    .note-ref { font-size: 11px; font-family: monospace; background: #f0f4ff; color: #3730a3; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
-    .note-summary { font-size: 13px; color: #555; font-style: italic; margin-bottom: 10px; }
-    .note-content { font-size: 14px; line-height: 1.8; }
-    .note-user { margin-top: 14px; padding: 10px 14px; background: #eff6ff; color: #1d4ed8; border-left: 3px solid #3b82f6; border-radius: 6px; font-size: 13px; }
-    .katex-display { overflow-x: auto; }
-    @media print { body { padding: 16px; } .note-card { border-color: #ccc; } }
+    body { font-family: "Georgia", serif; max-width: 700px; margin: 0 auto; padding: 20px 18px; color: #111; font-size: 12px; }
+    h1 { font-size: 16px; font-weight: bold; margin-bottom: 14px; border-bottom: 2px solid #111; padding-bottom: 6px; }
+    .note-card { page-break-inside: avoid; margin-bottom: 14px; border: 1px solid #ddd; border-radius: 8px; padding: 12px 14px; }
+    .note-header { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
+    .note-title { font-size: 13px; font-weight: bold; line-height: 1.4; }
+    .note-ref { font-size: 10px; font-family: monospace; background: #f0f4ff; color: #3730a3; padding: 1px 6px; border-radius: 999px; white-space: nowrap; }
+    .note-summary { font-size: 11px; color: #555; font-style: italic; margin-bottom: 6px; }
+    .note-content { font-size: 12px; line-height: 1.65; }
+    .note-user { margin-top: 8px; padding: 7px 10px; background: #eff6ff; color: #1d4ed8; border-left: 3px solid #3b82f6; border-radius: 5px; font-size: 11px; }
+    .katex-display { overflow-x: auto; margin: 0.5em 0; }
+    .katex { font-size: 0.95em; }
+    @media print { body { padding: 12px; } .note-card { border-color: #ccc; margin-bottom: 10px; } }
   </style>
 </head>
 <body>
@@ -177,7 +178,7 @@ export function StudyNotesPanel({ sessionId, generatingNoteFor, onNoteGenerated 
           <Loader2 className="h-3 w-3 animate-spin text-primary" />
         )}
       </SheetTrigger>
-      <SheetContent side="right" className="w-full sm:w-[440px] sm:max-w-[440px] overflow-y-auto p-0" noOverlay>
+      <SheetContent side="right" className="w-full sm:!w-[440px] sm:!max-w-[440px] overflow-y-auto p-0" noOverlay>
         <SheetHeader className="p-4 border-b border-border sticky top-0 bg-background z-10">
           <div className="flex items-center justify-between">
             <SheetTitle>Study Notes</SheetTitle>
@@ -267,14 +268,14 @@ export function StudyNotesPanel({ sessionId, generatingNoteFor, onNoteGenerated 
               >
                 {/* Top row: title + reference + delete */}
                 <div className="flex items-start justify-between gap-2">
-                  <span className="font-bold text-sm leading-snug">
-                    {note.title}
+                  <div className="min-w-0 flex-1">
+                    <MathContent className="font-bold text-sm leading-snug [&_p]:mb-0">{note.title}</MathContent>
                     {(note.reference_count ?? 1) > 1 && (
-                      <span className="ml-1.5 text-green-600 text-xs tracking-tight" title={`Referenced by ${note.reference_count} problems`}>
+                      <span className="ml-1 text-green-600 text-xs tracking-tight" title={`Referenced by ${note.reference_count} problems`}>
                         {"✓".repeat(Math.min(note.reference_count, 5))}
                       </span>
                     )}
-                  </span>
+                  </div>
                   <div className="flex items-center gap-1.5 shrink-0">
                     {note.reference && (
                       <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-mono">

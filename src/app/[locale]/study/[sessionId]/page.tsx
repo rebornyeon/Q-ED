@@ -1052,7 +1052,7 @@ export default function StudySessionPage({
           const sizeClass = len < 100 ? "text-2xl leading-loose" : len < 300 ? "text-xl leading-relaxed" : len < 600 ? "text-base leading-relaxed" : "text-sm leading-normal";
           return (
         <div className="relative rounded-xl bg-card border border-border/60 shadow-md px-8 py-10 mb-3">
-          <MathContent className={`${sizeClass} font-serif`}>
+          <MathContent className={`${sizeClass} font-serif problem-math`}>
             {currentProblem.content}
           </MathContent>
           {/* Similar button — pinned bottom-right of card */}
