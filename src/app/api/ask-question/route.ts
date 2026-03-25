@@ -65,34 +65,35 @@ export async function POST(request: NextRequest) {
     generationConfig: { temperature: 0.4, maxOutputTokens: 2048 },
   });
 
-  const intentHint = (() => {
-    const q = question.toLowerCase();
-    if (/why|왜|어떻게 성립|이유|직관|증명|intuition/.test(q)) return "INTUITION";
-    if (/how|어떻게|start|시작|what.*first|첫|어디서|approach/.test(q)) return "PROCEDURAL";
-    return "AUTO";
-  })();
+  type Intent = "INTUITION" | "PROCEDURAL" | "AUTO";
 
-  const prompt = `You are a concise math tutor. Answer the student's question below.
-
-INTENT: ${intentHint}
-${intentHint === "INTUITION" ? `
-→ INTUITION MODE: explain WHY the method/theorem is mathematically true.
+  const intentInstructions: Record<Intent, string> = {
+    INTUITION: `→ INTUITION MODE: explain WHY the method/theorem is mathematically true.
   Step 1: Core idea in 1 sentence — what does the theorem really say?
   ---
   Step 2: Geometric or concrete analogy — a picture in words
   ---
-  Step 3: Therefore, for this problem: [1 sentence application]
-` : intentHint === "PROCEDURAL" ? `
-→ PROCEDURAL MODE: minimum steps to move forward.
+  Step 3: Therefore, for this problem: [1 sentence application]`,
+    PROCEDURAL: `→ PROCEDURAL MODE: minimum steps to move forward.
   Step 1: The key formula or theorem (LaTeX block)
   ---
   Step 2: Map this problem's values into the formula
   ---
-  Step 3: The first concrete calculation
-` : `
-→ AUTO MODE: judge from the question. If conceptual → intuition first. If stuck → formula first.
-  Split into 2-3 steps separated by ---. Each step ≤ 3 sentences.
-`}
+  Step 3: The first concrete calculation`,
+    AUTO: `→ AUTO MODE: judge from the question. If conceptual → intuition first. If stuck → formula first.
+  Split into 2-3 steps separated by ---. Each step ≤ 3 sentences.`,
+  };
+
+  const q = question.toLowerCase();
+  const intent: Intent =
+    /why|왜|어떻게 성립|이유|직관|증명|intuition/.test(q) ? "INTUITION" :
+    /how|어떻게|start|시작|what.*first|첫|어디서|approach/.test(q) ? "PROCEDURAL" :
+    "AUTO";
+
+  const prompt = `You are a concise math tutor. Answer the student's question below.
+
+INTENT: ${intent}
+${intentInstructions[intent]}
 
 FORMAT RULES:
 - Separate steps with a line containing only "---"
