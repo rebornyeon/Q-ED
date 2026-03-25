@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
+const INTUITION_RE = /why|왜|어떻게 성립|이유|직관|증명|intuition/;
+const PROCEDURAL_RE = /how|어떻게|start|시작|what.*first|첫|어디서|approach/;
+
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -86,8 +89,8 @@ export async function POST(request: NextRequest) {
 
   const q = question.toLowerCase();
   const intent: Intent =
-    /why|왜|어떻게 성립|이유|직관|증명|intuition/.test(q) ? "INTUITION" :
-    /how|어떻게|start|시작|what.*first|첫|어디서|approach/.test(q) ? "PROCEDURAL" :
+    INTUITION_RE.test(q) ? "INTUITION" :
+    PROCEDURAL_RE.test(q) ? "PROCEDURAL" :
     "AUTO";
 
   const prompt = `You are a concise math tutor. Answer the student's question below.

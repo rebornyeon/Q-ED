@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, use } from "react";
+import { useEffect, useState, useRef, use, useMemo, memo } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations, useLocale } from "next-intl";
 import { createClient } from "@/lib/supabase/client";
@@ -28,7 +28,7 @@ import { MathContent } from "@/components/math-content";
 import { StudyNotesPanel } from "@/components/study-notes-panel";
 import type { Problem, Cue, ScoreData, SupplementaryDocument } from "@/types";
 
-function InsightCard({ cue }: { cue: Cue }) {
+const InsightCard = memo(function InsightCard({ cue }: { cue: Cue }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="rounded-lg border border-violet-400/20 bg-violet-500/5 mb-8 overflow-hidden">
@@ -60,7 +60,7 @@ function InsightCard({ cue }: { cue: Cue }) {
       )}
     </div>
   );
-}
+});
 
 export default function StudySessionPage({
   params,
@@ -83,6 +83,7 @@ export default function StudySessionPage({
     } catch { return new Set(); }
   });
   const { cues, setCues, resetCues, revealedLevel } = useCueStore();
+  const theoremCue = useMemo(() => cues.find((c) => c.cue_level === 1) ?? null, [cues]);
 
   type DifficultyRating = "again" | "hard" | "good" | "easy";
   const RATING = {
@@ -1205,10 +1206,7 @@ export default function StudySessionPage({
           <p className="text-xs text-green-600 font-medium mb-8">+{similarAdded} questions added</p>
         )}
 
-        {/* Insight card — shown after any rating */}
-        {rating && cues.find((c) => c.cue_level === 1) && (
-          <InsightCard cue={cues.find((c) => c.cue_level === 1)!} />
-        )}
+        {rating && theoremCue && <InsightCard cue={theoremCue} />}
 
         {/* Post-solve action pill — centered, floating feel */}
         <div className="flex justify-center mt-10 mb-12">
