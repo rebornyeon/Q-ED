@@ -1,8 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { ChevronDown, ChevronUp, Info } from "lucide-react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import type { Cue, CueType } from "@/types";
 import { MathContent } from "@/components/math-content";
 
@@ -16,10 +17,10 @@ const CUE_META: Record<CueType, { label: string; accent: string; bg: string }> =
 
 const LEVEL_LABELS: Record<number, string> = {
   0: "Understanding",
-  1: "Approach",
-  2: "Pattern",
-  3: "Direction",
-  4: "Kill Shot",
+  1: "Key Theorem",
+  2: "Mapping",
+  3: "First Step",
+  4: "Solution Path",
 };
 
 interface CueCardProps {
@@ -30,10 +31,11 @@ interface CueCardProps {
   onToggleCollapse?: () => void;
 }
 
-export function CueCard({ cue, showWhy, onToggleWhy, collapsed, onToggleCollapse }: CueCardProps) {
+export function CueCard({ cue, collapsed, onToggleCollapse }: CueCardProps) {
+  const [showIntuition, setShowIntuition] = useState(false);
   const meta = CUE_META[cue.cue_type];
+  const isTheoremLevel = cue.cue_level === 1;
 
-  // Collapsed state — thin clickable header only
   if (collapsed) {
     return (
       <button
@@ -50,7 +52,7 @@ export function CueCard({ cue, showWhy, onToggleWhy, collapsed, onToggleCollapse
 
   return (
     <div className={`border-l-3 ${meta.accent} ${meta.bg} rounded-r-lg px-4 py-3 space-y-2 select-text`}>
-      {/* Header row: level badge + label + Why? (top-right) + collapse toggle */}
+      {/* Header */}
       <div className="flex items-center gap-2 select-none">
         {onToggleCollapse && (
           <button onClick={onToggleCollapse} className="shrink-0 text-muted-foreground hover:text-foreground transition-colors">
@@ -62,24 +64,31 @@ export function CueCard({ cue, showWhy, onToggleWhy, collapsed, onToggleCollapse
         <div className="flex-1" />
         {cue.why_explanation && (
           <button
-            onClick={onToggleWhy}
-            className={`flex items-center gap-1 text-[11px] transition-colors ${showWhy ? "text-primary font-medium" : "text-muted-foreground/60 hover:text-muted-foreground"}`}
-            title="Why does this work?"
+            onClick={() => setShowIntuition((v) => !v)}
+            className={`flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border transition-all ${
+              showIntuition
+                ? "bg-violet-500/10 border-violet-400/40 text-violet-600 dark:text-violet-400 font-medium"
+                : "border-border/40 text-muted-foreground/60 hover:text-muted-foreground hover:border-border"
+            }`}
           >
-            <Info className="h-3 w-3" />
-            Why?
+            {isTheoremLevel ? "직관" : "왜?"}
           </button>
         )}
       </div>
 
       <MathContent className="text-sm leading-relaxed select-text cursor-text">{cue.content}</MathContent>
 
-      {cue.why_explanation && showWhy && (
+      {cue.why_explanation && showIntuition && (
         <>
           <Separator className="opacity-30" />
-          <MathContent className="text-xs text-muted-foreground leading-relaxed pl-3 border-l-2 border-primary/20 select-text cursor-text">
-            {cue.why_explanation}
-          </MathContent>
+          <div className="pl-3 border-l-2 border-violet-400/30">
+            <p className="text-[10px] font-semibold text-violet-500 uppercase tracking-wide mb-1 select-none">
+              {isTheoremLevel ? "이 정리가 성립하는 이유" : "왜 이 방법인가"}
+            </p>
+            <MathContent className="text-xs text-muted-foreground leading-relaxed select-text cursor-text">
+              {cue.why_explanation}
+            </MathContent>
+          </div>
         </>
       )}
     </div>

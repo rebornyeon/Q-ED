@@ -65,46 +65,56 @@ export async function POST(request: NextRequest) {
     generationConfig: { temperature: 0.4, maxOutputTokens: 2048 },
   });
 
-  const prompt = `You are a patient, expert math tutor helping a student studying for an exam. Answer the student's NEW question below.
+  const intentHint = (() => {
+    const q = question.toLowerCase();
+    if (/why|왜|어떻게 성립|이유|직관|증명|intuition/.test(q)) return "INTUITION";
+    if (/how|어떻게|start|시작|what.*first|첫|어디서|approach/.test(q)) return "PROCEDURAL";
+    return "AUTO";
+  })();
 
-CRITICAL FORMAT RULES:
-- Split your answer into exactly 2-4 short steps, separated by a line containing only "---"
-- Each step must be 2-4 sentences maximum — one focused idea per step
-- First step: the key insight or direct answer. Subsequent steps: elaboration or follow-through
+  const prompt = `You are a concise math tutor. Answer the student's question below.
+
+INTENT: ${intentHint}
+${intentHint === "INTUITION" ? `
+→ INTUITION MODE: explain WHY the method/theorem is mathematically true.
+  Step 1: Core idea in 1 sentence — what does the theorem really say?
+  ---
+  Step 2: Geometric or concrete analogy — a picture in words
+  ---
+  Step 3: Therefore, for this problem: [1 sentence application]
+` : intentHint === "PROCEDURAL" ? `
+→ PROCEDURAL MODE: minimum steps to move forward.
+  Step 1: The key formula or theorem (LaTeX block)
+  ---
+  Step 2: Map this problem's values into the formula
+  ---
+  Step 3: The first concrete calculation
+` : `
+→ AUTO MODE: judge from the question. If conceptual → intuition first. If stuck → formula first.
+  Split into 2-3 steps separated by ---. Each step ≤ 3 sentences.
+`}
+
+FORMAT RULES:
+- Separate steps with a line containing only "---"
+- Each step: ≤ 3 sentences, one focused idea
 - Use LaTeX for all math: inline $x^2$, display $$\\begin{align*}...\\end{align*}$$
-- NEVER write the same expression twice (no "$T+S$ T+S" — LaTeX only)
-- If the student asks "how do I start?", give the approach only — do NOT solve it fully
+- No preamble, no "great question", no "let's think about"
 - Build on prior conversation — never repeat what was already explained
 - Write in English
-
-Example format:
-The key idea here is that we apply the chain rule to the outer function first.
-
----
-
-Specifically, let $u = g(x)$, so the derivative becomes $f'(u) \cdot g'(x)$.
-
----
-
-Applying this to your problem: $$\\frac{d}{dx}[\\sin(x^2)] = \\cos(x^2) \\cdot 2x$$
 
 --- PROBLEM CONTEXT ---
 ${docTitle ? `Source: ${docTitle}` : ""}
 ${problem.section ? `Section: ${problem.section}` : ""}
-${problem.page ? `Page: ${problem.page}` : ""}
 ${problem.problem_number ? `Problem #: ${problem.problem_number}` : ""}
 
-Problem Statement:
-${problem.content}
+Problem: ${problem.content}
 
 Concepts: ${(problem.concepts as string[]).join(", ")}
-Difficulty: ${problem.difficulty}/5
-Problem Type: ${problem.problem_type}
 
---- CUES (step-by-step hints provided to the student) ---
+--- CUES SHOWN TO STUDENT ---
 ${cueContext}
 
-${historyBlock}--- STUDENT'S NEW QUESTION ---
+${historyBlock}--- STUDENT'S QUESTION ---
 ${question}`;
 
   const result = await model.generateContent(

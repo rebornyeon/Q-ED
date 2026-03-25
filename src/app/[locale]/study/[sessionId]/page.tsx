@@ -28,6 +28,40 @@ import { MathContent } from "@/components/math-content";
 import { StudyNotesPanel } from "@/components/study-notes-panel";
 import type { Problem, Cue, ScoreData, SupplementaryDocument } from "@/types";
 
+function InsightCard({ cue }: { cue: import("@/types").Cue }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rounded-lg border border-violet-400/20 bg-violet-500/5 mb-8 overflow-hidden">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-violet-500/5 transition-colors"
+      >
+        <span className="text-sm font-semibold text-violet-600 dark:text-violet-400 flex-1">
+          이 정리가 왜 성립해?
+        </span>
+        {open
+          ? <ChevronUp className="h-4 w-4 text-violet-400 shrink-0" />
+          : <ChevronDown className="h-4 w-4 text-violet-400 shrink-0" />
+        }
+      </button>
+      {open && (
+        <div className="px-4 pb-4 space-y-3 border-t border-violet-400/10">
+          <MathContent className="text-sm leading-relaxed mt-3">{cue.content}</MathContent>
+          {cue.why_explanation && (
+            <>
+              <div className="border-t border-violet-400/10" />
+              <div>
+                <p className="text-[10px] font-semibold text-violet-500 uppercase tracking-wide mb-1">직관</p>
+                <MathContent className="text-sm leading-relaxed text-muted-foreground">{cue.why_explanation}</MathContent>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function StudySessionPage({
   params,
 }: {
@@ -1170,6 +1204,15 @@ export default function StudySessionPage({
         {rating && RATING[rating].isCorrect && similarAdded !== null && (
           <p className="text-xs text-green-600 font-medium mb-8">+{similarAdded} questions added</p>
         )}
+
+        {/* Insight card — shown after any rating */}
+        {rating && (() => {
+          const theoremCue = cues.find((c) => c.cue_level === 1);
+          if (!theoremCue) return null;
+          return (
+            <InsightCard cue={theoremCue} />
+          );
+        })()}
 
         {/* Post-solve action pill — centered, floating feel */}
         <div className="flex justify-center mt-10 mb-12">

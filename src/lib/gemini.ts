@@ -357,20 +357,50 @@ export async function generateCuesForProblem(
 Use this context to make cues exam-targeted: highlight where this problem connects to the above patterns and tips.\n`
     : "";
 
-  const prompt = `You are a math education expert. Generate 5 step-by-step Cues for this problem in English.
-${contextBlock}
-Problem: ${problemContent}
+  const prompt = `You are a math education expert. Generate exactly 5 cues for this math problem.
 
-Return exactly this JSON array. For multi-step content, use \\n between each step so they display on separate lines (e.g. "Step 1: ...\nStep 2: ...\nStep 3: ..."):
+Problem: ${problemContent}
+${contextBlock}
+Return JSON array with exactly 5 elements — no other text:
 [
-  { "cue_type": "understanding", "cue_level": 0, "content": "Understanding: [Precisely what this problem is asking you to do. Break down: (1) What is given/known, (2) What you need to find/prove/compute, (3) Any key constraints or conditions]", "why_explanation": "Understanding the question precisely before attempting it prevents wasted effort on the wrong goal." },
-  { "cue_type": "kill_shot", "cue_level": 1, "content": "Level 1: Approach strategy — how to think about this problem. Use \\n to separate key points.", "why_explanation": "Why this direction works" },
-  { "cue_type": "pattern",   "cue_level": 2, "content": "Level 2: Pattern guide — what structure to recognize. Use \\n between each observation.", "why_explanation": "Why this pattern applies" },
-  { "cue_type": "speed",     "cue_level": 3, "content": "Level 3: Step-by-step solution direction. Number each step and separate with \\n:\\n1. First step\\n2. Second step\\n3. Third step", "why_explanation": "Why this method works" },
-  { "cue_type": "kill_shot", "cue_level": 4, "content": "Level 4: Kill Shot — the one decisive line that ends the problem", "why_explanation": "Why this is the key move" }
+  {
+    "cue_type": "understanding",
+    "cue_level": 0,
+    "content": "Understanding: [Precisely what this problem asks. (1) Given: ... (2) Find: ... (3) Constraints: ...]",
+    "why_explanation": "Clarifying what is asked before attempting prevents wasted effort."
+  },
+  {
+    "cue_type": "kill_shot",
+    "cue_level": 1,
+    "content": "**[Theorem or Formula Name]**\\n$$[exact LaTeX formula or theorem statement]$$",
+    "why_explanation": "[1-2 sentences: WHY this theorem is mathematically true — the core intuition, not how to use it. E.g., 'This holds because...']"
+  },
+  {
+    "cue_type": "pattern",
+    "cue_level": 2,
+    "content": "Map to this problem:\\n[Concretely map THIS problem's values to the formula variables. E.g., 'V = R^3, so dim V = 3. T(x,y,z) = ...']",
+    "why_explanation": "[Why this mapping is valid for this specific problem — 1 sentence]"
+  },
+  {
+    "cue_type": "speed",
+    "cue_level": 3,
+    "content": "First step: [The single first concrete calculation to perform — specific, no prose]",
+    "why_explanation": "[Why this is the right first move — 1 sentence]"
+  },
+  {
+    "cue_type": "kill_shot",
+    "cue_level": 4,
+    "content": "Solution path:\\n1. [step]\\n2. [step]\\n3. [step]\\n4. [final answer form]",
+    "why_explanation": "[The key insight that unlocks the whole problem — 1 sentence]"
+  }
 ]
 
-Return exactly 5 elements. The level 0 cue must be concrete and specific to THIS problem — not generic. All text must be in English. Use actual \\n characters (not literal backslash-n) for line breaks within content strings.`;
+STRICT RULES:
+- Level 1 content MUST start with **Theorem/Formula Name** then a LaTeX block $$...$$
+- Level 2-4 content: under 35 words each
+- why_explanation for level 1: explain WHY the theorem is true mathematically (intuition), NOT how to apply it
+- why_explanation for levels 2-4: 1 sentence on why that step/mapping is valid
+- All text in English. Use actual newline characters (\\n) in JSON strings for line breaks.`;
 
   try {
     const result = await model.generateContent(prompt);
