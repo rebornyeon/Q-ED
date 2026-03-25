@@ -20,7 +20,7 @@ interface CueRevealProps {
 }
 
 export function CueReveal({ cues }: CueRevealProps) {
-  const { revealedLevel, revealNextLevel, showWhy, toggleWhy } = useCueStore();
+  const { revealedLevel, revealNextLevel } = useCueStore();
   // Track which cue levels are manually expanded (latest is auto-expanded)
   const [manualExpanded, setManualExpanded] = useState<Set<number>>(new Set());
 
@@ -77,8 +77,6 @@ export function CueReveal({ cues }: CueRevealProps) {
             <CueCard
               key={cue.id}
               cue={cue}
-              showWhy={showWhy}
-              onToggleWhy={toggleWhy}
               collapsed={!isCueExpanded(cue)}
               onToggleCollapse={() => toggleCueCollapse(cue.cue_level)}
             />

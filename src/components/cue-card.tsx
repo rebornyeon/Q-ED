@@ -25,8 +25,6 @@ const LEVEL_LABELS: Record<number, string> = {
 
 interface CueCardProps {
   cue: Cue;
-  showWhy: boolean;
-  onToggleWhy: () => void;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
 }

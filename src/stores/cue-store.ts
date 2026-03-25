@@ -3,13 +3,11 @@ import type { Cue, CueLevel } from "@/types";
 
 interface CueState {
   cues: Cue[];
-  revealedLevel: CueLevel | 0; // 0 = 아무것도 공개 안됨
+  revealedLevel: CueLevel | 0;
   isRevealing: boolean;
-  showWhy: boolean;
 
   setCues: (cues: Cue[]) => void;
   revealNextLevel: () => void;
-  toggleWhy: () => void;
   resetCues: () => void;
 }
 
@@ -17,9 +15,8 @@ export const useCueStore = create<CueState>((set) => ({
   cues: [],
   revealedLevel: 0,
   isRevealing: false,
-  showWhy: false,
 
-  setCues: (cues) => set({ cues, revealedLevel: 0, showWhy: false }),
+  setCues: (cues) => set({ cues, revealedLevel: 0 }),
 
   revealNextLevel: () =>
     set((state) => {
@@ -28,8 +25,6 @@ export const useCueStore = create<CueState>((set) => ({
       return { revealedLevel: nextLevel, isRevealing: false };
     }),
 
-  toggleWhy: () => set((state) => ({ showWhy: !state.showWhy })),
-
   resetCues: () =>
-    set({ cues: [], revealedLevel: 0, isRevealing: false, showWhy: false }),
+    set({ cues: [], revealedLevel: 0, isRevealing: false }),
 }));

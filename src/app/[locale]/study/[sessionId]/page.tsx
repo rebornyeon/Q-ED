@@ -28,7 +28,7 @@ import { MathContent } from "@/components/math-content";
 import { StudyNotesPanel } from "@/components/study-notes-panel";
 import type { Problem, Cue, ScoreData, SupplementaryDocument } from "@/types";
 
-function InsightCard({ cue }: { cue: import("@/types").Cue }) {
+function InsightCard({ cue }: { cue: Cue }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="rounded-lg border border-violet-400/20 bg-violet-500/5 mb-8 overflow-hidden">
@@ -1206,13 +1206,9 @@ export default function StudySessionPage({
         )}
 
         {/* Insight card — shown after any rating */}
-        {rating && (() => {
-          const theoremCue = cues.find((c) => c.cue_level === 1);
-          if (!theoremCue) return null;
-          return (
-            <InsightCard cue={theoremCue} />
-          );
-        })()}
+        {rating && cues.find((c) => c.cue_level === 1) && (
+          <InsightCard cue={cues.find((c) => c.cue_level === 1)!} />
+        )}
 
         {/* Post-solve action pill — centered, floating feel */}
         <div className="flex justify-center mt-10 mb-12">
