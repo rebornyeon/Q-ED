@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
     .select("title, reference, content, summary")
     .eq("session_id", sessionId ?? "")
     .order("created_at", { ascending: false })
-    .limit(5);
+    .limit(10);
 
   if (sessionNotes && sessionNotes.length > 0) {
     notesContext = sessionNotes
