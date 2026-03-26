@@ -347,16 +347,21 @@ Rules:
 // 문제 하나에 대해 Cue 4개 생성 (보조 자료 컨텍스트 선택적 포함)
 export async function generateCuesForProblem(
   problemContent: string,
-  supplementaryContext?: SupplementaryInsights[]
+  supplementaryContext?: SupplementaryInsights[],
+  supplementaryProblems?: { content: string }[]
 ): Promise<GeneratedCue[]> {
   const model = getJsonModel();
 
   const contextBlock = supplementaryContext && supplementaryContext.length > 0
     ? `\nExam Context (from supplementary materials — weight these heavily):
 - Emphasized topics: ${[...new Set(supplementaryContext.flatMap((s) => s.emphasized_topics))].join(", ")}
+- Key formulas: ${[...new Set(supplementaryContext.flatMap((s) => s.key_formulas ?? []))].join(", ")}
 - Common exam patterns: ${[...new Set(supplementaryContext.flatMap((s) => s.exam_patterns))].join(", ")}
 - Professor/exam tips: ${[...new Set(supplementaryContext.flatMap((s) => s.study_tips))].join(", ")}
-Use this context to make cues exam-targeted: highlight where this problem connects to the above patterns and tips.\n`
+${supplementaryProblems && supplementaryProblems.length > 0
+  ? `- Similar problems from supplementary material:\n${supplementaryProblems.map((p, i) => `  ${i + 1}. ${p.content.slice(0, 200)}`).join("\n")}`
+  : ""}
+Use this context to make cues exam-targeted: highlight where this problem connects to the above patterns, formulas, and tips.\n`
     : "";
 
   const prompt = `You are a math education expert. Generate exactly 5 cues for this math problem.

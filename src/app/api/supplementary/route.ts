@@ -9,31 +9,22 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const formData = await request.formData();
-  const file = formData.get("file") as File;
-  const title = formData.get("title") as string;
-  const documentId = formData.get("documentId") as string;
-  const docType = (formData.get("docType") as string) || "other";
+  const { filePath, title, documentId, docType = "other" } = await request.json();
 
-  if (!file || !documentId) {
-    return NextResponse.json({ error: "file and documentId are required" }, { status: 400 });
-  }
-  if (file.type !== "application/pdf") {
-    return NextResponse.json({ error: "Only PDF files are allowed" }, { status: 400 });
+  if (!filePath || !documentId) {
+    return NextResponse.json({ error: "filePath and documentId are required" }, { status: 400 });
   }
 
-  const filePath = `${user.id}/supplementary/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, "_")}`;
-  const arrayBuffer = await file.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
-
-  const { error: uploadError } = await supabase.storage
+  // Download from Supabase Storage (already uploaded by client)
+  const { data: fileData, error: downloadError } = await supabase.storage
     .from("pdfs")
-    .upload(filePath, buffer, { contentType: "application/pdf" });
+    .download(filePath);
 
-  if (uploadError) {
-    return NextResponse.json({ error: "Failed to upload file" }, { status: 500 });
+  if (downloadError || !fileData) {
+    return NextResponse.json({ error: "Failed to download PDF from storage" }, { status: 500 });
   }
 
+  const buffer = Buffer.from(await fileData.arrayBuffer());
   const { insights, problems } = await analyzeSupplementaryPDF(buffer.toString("base64"));
   const insightsWithType = { ...insights, doc_type: docType };
 
@@ -42,7 +33,7 @@ export async function POST(request: NextRequest) {
     .insert({
       document_id: documentId,
       user_id: user.id,
-      title: title || file.name.replace(".pdf", ""),
+      title: title || (filePath.split("/").pop()?.replace(".pdf", "") ?? "Supplementary"),
       file_path: filePath,
       insights: insightsWithType,
       problems,

@@ -42,20 +42,26 @@ export async function POST(request: NextRequest) {
     .single();
 
   let supplementaryContext: SupplementaryInsights[] | undefined;
+  let supplementaryProblems: { content: string }[] | undefined;
   if (problem?.document_id) {
     const { data: suppDocs } = await supabase
       .from("supplementary_documents")
-      .select("insights")
+      .select("insights, problems")
       .eq("document_id", problem.document_id)
       .eq("user_id", user.id);
 
     if (suppDocs && suppDocs.length > 0) {
       supplementaryContext = suppDocs.map((d) => d.insights as SupplementaryInsights);
+      // Collect up to 10 problems from supplementary docs as concrete examples
+      const allProblems = suppDocs.flatMap((d) =>
+        Array.isArray(d.problems) ? (d.problems as { content: string }[]) : []
+      );
+      if (allProblems.length > 0) supplementaryProblems = allProblems.slice(0, 10);
     }
   }
 
   // Generate new cues with Gemini (enriched with supplementary context)
-  const generatedCues = await generateCuesForProblem(problemContent, supplementaryContext);
+  const generatedCues = await generateCuesForProblem(problemContent, supplementaryContext, supplementaryProblems);
 
   if (generatedCues.length === 0) {
     return NextResponse.json({ cues: [] });

@@ -4,6 +4,7 @@ import { useState, useRef } from "react";
 import { Upload, Loader2, X, CheckCircle2, AlertCircle, Clock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { SupplementaryDocument, SupplementaryDocType } from "@/types";
+import { createClient } from "@/lib/supabase/client";
 
 const DOC_TYPES: { value: SupplementaryDocType; label: string; color: string }[] = [
   { value: "past_exam",     label: "Past Exam",     color: "bg-red-500/15 text-red-600 border-red-500/30" },
@@ -54,13 +55,24 @@ export function SupplementaryUpload({ documentId, initialDocs = [], onDocsChange
     const start = Date.now();
     timerRef.current = setInterval(() => setUploadElapsed(Math.floor((Date.now() - start) / 1000)), 500);
 
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("documentId", documentId);
-    formData.append("title", file.name.replace(/\.pdf$/i, ""));
-    formData.append("docType", selectedType);
+    // Upload to Supabase Storage client-side first (avoids Vercel 4.5MB limit)
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setError("로그인이 필요합니다."); setUploading(null); return; }
+    const filePath = `${user.id}/supplementary/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, "_")}`;
+    const { error: uploadError } = await supabase.storage.from("pdfs").upload(filePath, file, { contentType: "application/pdf" });
+    if (uploadError) { setError("Storage 업로드 실패"); setUploading(null); return; }
 
-    const res = await fetch("/api/supplementary", { method: "POST", body: formData });
+    const res = await fetch("/api/supplementary", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        filePath,
+        documentId,
+        title: file.name.replace(/\.pdf$/i, ""),
+        docType: selectedType,
+      }),
+    });
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
     setUploadElapsed(0);
     setUploadEstimate(0);
