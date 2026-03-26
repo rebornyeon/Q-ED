@@ -17,7 +17,7 @@ import { Progress } from "@/components/ui/progress";
 import {
   ChevronLeft, ChevronRight, Trophy, AlertTriangle,
   Loader2, List, BookPlus, CopyPlus, CheckSquare, Square, Check,
-  MessageCircleQuestion, Send, ChevronDown, ChevronUp, Sparkles, ImageIcon, X, Plus, FileText, ExternalLink, Printer,
+  MessageCircleQuestion, Send, ChevronDown, ChevronUp, Sparkles, ImageIcon, X, Plus, FileText, ExternalLink, Printer, Library, BookOpen,
 } from "lucide-react";
 import {
   Sheet, SheetTrigger, SheetContent, SheetHeader, SheetTitle,
@@ -158,6 +158,17 @@ export default function StudySessionPage({
   const askInputRef = useRef<HTMLTextAreaElement>(null);
   const askImageInputRef = useRef<HTMLInputElement>(null);
   const cueLoadIdRef = useRef(0);
+  const studyChatInputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Study Chat (session-level)
+  const [studyChatOpen, setStudyChatOpen] = useState(false);
+  const [studyChatQuestion, setStudyChatQuestion] = useState("");
+  const [studyChatHistory, setStudyChatHistory] = useState<{ q: string; a: string }[]>([]);
+  const [studyChatLoading, setStudyChatLoading] = useState(false);
+
+  // Supplementary docs loaded from DB (for textbook problem button)
+  const [existingSuppdocs, setExistingSuppdocs] = useState<SupplementaryDocument[]>([]);
+  const [addingTextbookProblems, setAddingTextbookProblems] = useState<Record<string, boolean>>({});
   // Read saved index synchronously during init (before any effect can overwrite localStorage)
   const savedStartIndexRef = useRef(
     typeof window !== "undefined"
@@ -230,7 +241,15 @@ export default function StudySessionPage({
         const idx = savedStartIndexRef.current;
         if (idx > 0 && idx < allProblems.length) jumpToIndex(idx);
       }
-      if (sessionData.document_id) setDocumentId(sessionData.document_id);
+      if (sessionData.document_id) {
+        setDocumentId(sessionData.document_id);
+        // Fetch existing supplementary docs for this document
+        const { data: suppDocs } = await supabase
+          .from("supplementary_documents")
+          .select("*")
+          .eq("document_id", sessionData.document_id);
+        if (suppDocs) setExistingSuppdocs(suppDocs as SupplementaryDocument[]);
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const docs = (sessionData as any).documents;
       if (docs?.title) setDocumentTitle(docs.title);
@@ -610,6 +629,46 @@ export default function StudySessionPage({
       }
     } finally {
       setAskLoading(false);
+    }
+  }
+
+  async function handleAddTextbookProblems(suppDocId: string) {
+    setAddingTextbookProblems((prev) => ({ ...prev, [suppDocId]: true }));
+    try {
+      const res = await fetch("/api/add-textbook-problems", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId, suppDocId }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        appendProblems(data.problems);
+        // Mark this doc as added so we don't show the button again
+        setExistingSuppdocs((prev) => prev.map((d) => d.id === suppDocId ? { ...d, _added: true } as SupplementaryDocument & { _added: boolean } : d));
+      }
+    } finally {
+      setAddingTextbookProblems((prev) => ({ ...prev, [suppDocId]: false }));
+    }
+  }
+
+  async function handleStudyChat() {
+    if (!studyChatQuestion.trim() || studyChatLoading) return;
+    const q = studyChatQuestion.trim();
+    setStudyChatLoading(true);
+    setStudyChatQuestion("");
+    if (studyChatInputRef.current) studyChatInputRef.current.style.height = "36px";
+    try {
+      const res = await fetch("/api/study-chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId, documentId, question: q, history: studyChatHistory }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setStudyChatHistory((prev) => [...prev, { q, a: data.answer }]);
+      }
+    } finally {
+      setStudyChatLoading(false);
     }
   }
 
@@ -1065,6 +1124,48 @@ export default function StudySessionPage({
                       <p className="text-xs text-muted-foreground mt-1">Add past exams, professor notes, or study guides.</p>
                     </SheetHeader>
                     <div className="p-4 space-y-4">
+                      {/* Textbook problems section */}
+                      {(() => {
+                        const allSupp = [...existingSuppdocs, ...suppDocsInSession];
+                        const seen = new Set<string>();
+                        const textbooks = allSupp.filter((d) => {
+                          if (seen.has(d.id)) return false;
+                          seen.add(d.id);
+                          return d.insights?.doc_type === "textbook" && Array.isArray(d.problems) && d.problems.length > 0;
+                        });
+                        if (textbooks.length === 0) return null;
+                        return (
+                          <div className="space-y-2">
+                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Textbook Problems</p>
+                            {textbooks.map((d) => {
+                              const alreadyAdded = (d as SupplementaryDocument & { _added?: boolean })._added;
+                              return (
+                                <div key={d.id} className="flex items-center justify-between gap-2 p-2.5 rounded-lg border border-border/50 bg-muted/20">
+                                  <div className="min-w-0">
+                                    <p className="text-xs font-medium truncate">{d.title}</p>
+                                    <p className="text-[10px] text-muted-foreground">{d.problems.length} problems</p>
+                                  </div>
+                                  <Button
+                                    size="sm"
+                                    variant={alreadyAdded ? "secondary" : "outline"}
+                                    className="shrink-0 text-xs h-7 gap-1"
+                                    disabled={addingTextbookProblems[d.id] || alreadyAdded}
+                                    onClick={() => handleAddTextbookProblems(d.id)}
+                                  >
+                                    {addingTextbookProblems[d.id]
+                                      ? <><Loader2 className="h-3 w-3 animate-spin" />Adding...</>
+                                      : alreadyAdded
+                                      ? <><Check className="h-3 w-3" />Added</>
+                                      : <><Plus className="h-3 w-3" />Add to Session</>
+                                    }
+                                  </Button>
+                                </div>
+                              );
+                            })}
+                            <div className="border-t border-border/40 pt-2" />
+                          </div>
+                        );
+                      })()}
                       <SupplementaryUpload
                         documentId={documentId}
                         onDocsChange={setSuppDocsInSession}
@@ -1097,6 +1198,88 @@ export default function StudySessionPage({
               generatingNoteFor={generatingNoteFor}
               onNoteGenerated={() => {}}
             />
+            {/* Study Chat — session-level NotebookLM-style chat */}
+            <Sheet open={studyChatOpen} onOpenChange={setStudyChatOpen}>
+              <SheetTrigger render={<Button variant="ghost" size="sm" className="gap-1.5 text-xs h-8" />}>
+                <Library className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Study Chat</span>
+              </SheetTrigger>
+              <SheetContent side="right" className="w-full sm:max-w-lg overflow-hidden flex flex-col p-0">
+                <SheetHeader className="p-4 border-b border-border sticky top-0 bg-background z-10 shrink-0">
+                  <SheetTitle className="flex items-center gap-2">
+                    <Library className="h-4 w-4" />
+                    Study Chat
+                  </SheetTitle>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Ask anything about your course materials — theorems, lecture notes, supplementary docs.
+                  </p>
+                </SheetHeader>
+                {/* Chat history */}
+                <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-h-0">
+                  {studyChatHistory.length === 0 && !studyChatLoading && (
+                    <div className="text-center py-10 space-y-3">
+                      <BookOpen className="h-10 w-10 text-muted-foreground/30 mx-auto" />
+                      <p className="text-sm text-muted-foreground/60">
+                        Ask about any theorem, concept, or topic from your study materials.
+                      </p>
+                      <div className="flex flex-wrap gap-2 justify-center">
+                        {["What is the key theorem in this session?", "Explain the main concepts", "What should I focus on for the exam?"].map((s) => (
+                          <button
+                            key={s}
+                            onClick={() => setStudyChatQuestion(s)}
+                            className="text-xs px-3 py-1.5 rounded-full border border-border/60 bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                          >
+                            {s}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {studyChatHistory.map((item, i) => (
+                    <div key={i} className="space-y-2">
+                      <div className="flex gap-2">
+                        <span className="text-xs font-bold text-primary shrink-0 mt-0.5">Q:</span>
+                        <p className="text-sm font-medium text-foreground">{item.q}</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <span className="text-xs font-bold text-green-600 shrink-0 mt-0.5">A:</span>
+                        <MathContent className="text-sm leading-relaxed flex-1">{item.a}</MathContent>
+                      </div>
+                      {i < studyChatHistory.length - 1 && <div className="border-t border-border/30 pt-1" />}
+                    </div>
+                  ))}
+                  {studyChatLoading && (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Thinking...
+                    </div>
+                  )}
+                </div>
+                {/* Input */}
+                <div className="px-3 py-3 border-t border-border/40 bg-muted/20 shrink-0">
+                  <div className="flex gap-2 items-end">
+                    <textarea
+                      ref={studyChatInputRef}
+                      value={studyChatQuestion}
+                      onChange={(e) => {
+                        setStudyChatQuestion(e.target.value);
+                        e.target.style.height = "auto";
+                        e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
+                      }}
+                      onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleStudyChat(); } }}
+                      placeholder="Ask about theorems, concepts, lecture notes..."
+                      rows={1}
+                      className="flex-1 text-sm px-2.5 py-2 rounded-md border border-border bg-background focus:outline-none focus:ring-1 focus:ring-primary resize-none overflow-hidden"
+                      style={{ minHeight: "36px" }}
+                      disabled={studyChatLoading}
+                    />
+                    <Button size="sm" onClick={handleStudyChat} disabled={studyChatLoading || !studyChatQuestion.trim()} className="shrink-0 gap-1 h-8 px-2.5">
+                      {studyChatLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+                    </Button>
+                  </div>
+                </div>
+              </SheetContent>
+            </Sheet>
             <Button variant="ghost" size="sm" className="gap-1.5 text-xs h-8" onClick={handlePrintSession} title="Print all problems">
               <Printer className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Print</span>

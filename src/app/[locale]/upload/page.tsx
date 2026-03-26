@@ -759,7 +759,7 @@ export default function UploadPage() {
                 <p className="text-xs text-muted-foreground animate-pulse">
                   Building your session and generating Cues — usually 10–30 seconds
                 </p>
-                <Progress value={undefined} className="h-1 max-w-xs mx-auto opacity-50" />
+                <Progress value={null as unknown as number} className="h-1 max-w-xs mx-auto opacity-50" />
               </div>
             )}
 
