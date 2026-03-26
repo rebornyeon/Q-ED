@@ -43,7 +43,7 @@ function fixLatexBackslashes(tex: string): string {
         if (cols > 0) {
           // Insert \\ after every `cols`-th &
           let count = 0;
-          fixedBody = fixedBody.replace(/&/g, (m) => {
+          fixedBody = fixedBody.replace(/&/g, (m: string) => {
             count++;
             return count % cols === 0 ? `& \\\\\n` : m;
           });
