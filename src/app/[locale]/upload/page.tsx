@@ -34,6 +34,7 @@ const PHASES = [
 ];
 import type { Concept, SupplementaryDocument, GeminiAnalysisResult, SupplementaryDocType } from "@/types";
 import { SupplementaryUpload } from "@/components/supplementary-upload";
+import { createClient } from "@/lib/supabase/client";
 
 type UploadStep = "idle" | "scanning" | "selecting" | "analyzing" | "done" | "error";
 
@@ -117,6 +118,7 @@ export default function UploadPage() {
 
   // Chapter selection state (for large PDFs)
   const [tocDataMap, setTocDataMap] = useState<Map<string, FileTOCData>>(new Map());
+  const [uploadedPaths, setUploadedPaths] = useState<Map<string, string>>(new Map());
 
   // Concept + supplementary state
   const [selectedConcepts, setSelectedConcepts] = useState<Set<string>>(new Set());
@@ -157,14 +159,30 @@ export default function UploadPage() {
     setError(null);
     setFileErrors(new Map());
 
-    // Scan TOC for each file to check if chapter selection is needed
+    // Step 0: Upload all files to Supabase Storage first (avoids Vercel 4.5MB payload limit)
     setStep("scanning");
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setError("로그인이 필요합니다."); setStep("error"); return; }
+
+    const uploadedPaths = new Map<string, string>(); // fileId → storagePath
+    await Promise.all(fileEntries.map(async (entry) => {
+      const filePath = `${user.id}/${Date.now()}-${entry.file.name.replace(/[^a-zA-Z0-9.-]/g, "_")}`;
+      const { error } = await supabase.storage.from("pdfs").upload(filePath, entry.file, { contentType: "application/pdf" });
+      if (!error) uploadedPaths.set(entry.id, filePath);
+    }));
+
+    // Scan TOC for each file to check if chapter selection is needed
     const tocResults = await Promise.all(
       fileEntries.map(async (entry) => {
-        const fd = new FormData();
-        fd.append("file", entry.file);
+        const filePath = uploadedPaths.get(entry.id);
+        if (!filePath) return null;
         try {
-          const res = await fetch("/api/toc", { method: "POST", body: fd });
+          const res = await fetch("/api/toc", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ filePath }),
+          });
           if (res.ok) return { fileId: entry.id, ...(await res.json()) };
         } catch { /* ignore, proceed without TOC */ }
         return null;
@@ -187,17 +205,17 @@ export default function UploadPage() {
       }
     }
 
+    setUploadedPaths(uploadedPaths);
     if (anyNeedsSelection) {
       setTocDataMap(newTocMap);
       setStep("selecting");
     } else {
-      // No large PDFs — go straight to analysis
-      await runAnalysis(new Map());
+      await runAnalysis(new Map(), uploadedPaths);
     }
   }
 
   // ── Analysis (called after chapter selection or directly) ─────────
-  async function runAnalysis(tocMap: Map<string, FileTOCData>) {
+  async function runAnalysis(tocMap: Map<string, FileTOCData>, uploadedPaths?: Map<string, string>) {
     setEstimatedSecs(fileEntries.reduce((s, e) => s + estimateSeconds(e.file.size), 0));
     setStep("analyzing");
     const results: FileResult[] = [];
@@ -208,20 +226,21 @@ export default function UploadPage() {
       setCurrentFileIndex(i + 1);
       setCurrentFileName(entry.file.name);
 
-      const formData = new FormData();
-      formData.append("file", entry.file);
-      formData.append("title", entry.title.trim() || entry.file.name.replace(/\.pdf$/i, ""));
+      const filePath = uploadedPaths?.get(entry.id);
+      if (!filePath) { errors.set(entry.id, "업로드 실패"); continue; }
 
-      // Attach selected page ranges if chapter selection was done for this file
+      const title = entry.title.trim() || entry.file.name.replace(/\.pdf$/i, "");
       const tocData = tocMap.get(entry.id);
-      if (tocData && tocData.selectedIndices.size > 0) {
-        const ranges = Array.from(tocData.selectedIndices)
-          .map((idx) => ({ start: tocData.chapters[idx].startPage, end: tocData.chapters[idx].endPage }));
-        formData.append("selectedPageRanges", JSON.stringify(ranges));
-      }
+      const selectedPageRanges = tocData && tocData.selectedIndices.size > 0
+        ? Array.from(tocData.selectedIndices).map((idx) => ({ start: tocData.chapters[idx].startPage, end: tocData.chapters[idx].endPage }))
+        : undefined;
 
       try {
-        const res = await fetch("/api/analyze", { method: "POST", body: formData });
+        const res = await fetch("/api/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ filePath, title, selectedPageRanges }),
+        });
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
           errors.set(entry.id, data.error ?? "분석 실패");
@@ -482,7 +501,7 @@ export default function UploadPage() {
             <Button
               className="w-full"
               size="lg"
-              onClick={() => runAnalysis(tocDataMap)}
+              onClick={() => runAnalysis(tocDataMap, uploadedPaths)}
               disabled={!allChaptersSelected()}
             >
               Analyze selected chapters

@@ -12,13 +12,13 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const formData = await request.formData();
-  const file = formData.get("file") as File;
+  const { filePath } = await request.json();
+  if (!filePath) return NextResponse.json({ error: "filePath is required" }, { status: 400 });
 
-  if (!file) return NextResponse.json({ error: "file is required" }, { status: 400 });
-  if (file.type !== "application/pdf") return NextResponse.json({ error: "Only PDF files are allowed" }, { status: 400 });
+  const { data: fileData, error: downloadError } = await supabase.storage.from("pdfs").download(filePath);
+  if (downloadError || !fileData) return NextResponse.json({ error: "Failed to download PDF" }, { status: 500 });
 
-  const buffer = Buffer.from(await file.arrayBuffer());
+  const buffer = Buffer.from(await fileData.arrayBuffer());
   const base64 = buffer.toString("base64");
 
   const { totalPages, chapters } = await extractTOC(base64);
