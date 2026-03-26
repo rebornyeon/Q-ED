@@ -1,6 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { PDFDocument } from "pdf-lib";
-import type { GeminiAnalysisResult, GeneratedCue, GeneratedProblem, SupplementaryInsights, RawProblem } from "@/types";
+import type { GeminiAnalysisResult, GeneratedCue, GeneratedProblem, SupplementaryInsights, RawProblem, ExtractedTheorem, KnowledgeBlock } from "@/types";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
@@ -344,13 +344,67 @@ Rules:
   return { concepts: [], problems: [] };
 }
 
+// Extract theorems, definitions, lemmas, corollaries from a PDF chunk
+async function extractTheoremsFromChunk(base64Chunk: string): Promise<ExtractedTheorem[]> {
+  const model = getJsonModel();
+  const prompt = `Math education expert. Extract ALL theorems, definitions, lemmas, corollaries, and propositions from this PDF section. Return JSON array only:
+[{"title":"Theorem 3.2: Rank-Nullity Theorem","type":"theorem","content":"If $T: V \\\\to W$ is linear, then $$\\\\dim V = \\\\text{rank}(T) + \\\\text{nullity}(T)$$","page":47,"section":"Chapter 3","concepts":["linear transformation","rank","nullity"]}]
+Rules:
+- Include ONLY named/numbered theorems, definitions, lemmas, corollaries, propositions — not examples or problems
+- content: exact statement using LaTeX ($...$ inline, $$...$$ display, \\\\begin{bmatrix} for matrices)
+- If none found, return []`;
+
+  try {
+    const result = await model.generateContent([
+      { inlineData: { data: base64Chunk, mimeType: "application/pdf" } },
+      prompt,
+    ]);
+    const parsed = parseGeminiJson<unknown>(result.response.text());
+    if (!Array.isArray(parsed)) return [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return parsed.filter((t: any) => t && typeof t.title === "string" && typeof t.content === "string") as ExtractedTheorem[];
+  } catch {
+    return [];
+  }
+}
+
+// Extract knowledge blocks (worked solutions, theorem statements, notes, formulas) from a PDF chunk
+async function extractKnowledgeBlocksFromChunk(base64Chunk: string): Promise<KnowledgeBlock[]> {
+  const model = getJsonModel();
+  const prompt = `Math education expert. Extract all important NON-PROBLEM content from this PDF section: worked solutions, theorem statements, professor notes, formula derivations, annotated examples. Return JSON array only:
+[{"type":"solution","title":"Solution to Problem 3","content":"Full worked solution with LaTeX...","page":5,"concepts":["eigenvalues","determinant"]}]
+Rules:
+- DO NOT include bare problem statements without solutions
+- DO include: full worked solutions (problem + solution together), theorem/lemma statements, derivations, professor annotations, formula sheets
+- content: complete content with LaTeX ($...$ inline, $$...$$ display)
+- If none found, return []`;
+
+  try {
+    const result = await model.generateContent([
+      { inlineData: { data: base64Chunk, mimeType: "application/pdf" } },
+      prompt,
+    ]);
+    const parsed = parseGeminiJson<unknown>(result.response.text());
+    if (!Array.isArray(parsed)) return [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return parsed.filter((b: any) => b && typeof b.type === "string" && typeof b.content === "string") as KnowledgeBlock[];
+  } catch {
+    return [];
+  }
+}
+
 // 문제 하나에 대해 Cue 4개 생성 (보조 자료 컨텍스트 선택적 포함)
 export async function generateCuesForProblem(
   problemContent: string,
   supplementaryContext?: SupplementaryInsights[],
-  supplementaryProblems?: { content: string }[]
+  supplementaryProblems?: { content: string }[],
+  knowledgeBlocks?: KnowledgeBlock[]
 ): Promise<GeneratedCue[]> {
   const model = getJsonModel();
+
+  const knowledgeBlocksBlock = knowledgeBlocks && knowledgeBlocks.length > 0
+    ? `\nKnowledge blocks from supplementary (worked solutions, theorems, notes):\n${knowledgeBlocks.slice(0, 10).map((b, i) => `${i + 1}. [${b.type.charAt(0).toUpperCase() + b.type.slice(1)}]${b.title ? ` ${b.title}` : ""}: ${b.content.slice(0, 300)}`).join("\n")}\n`
+    : "";
 
   const contextBlock = supplementaryContext && supplementaryContext.length > 0
     ? `\nExam Context (from supplementary materials — weight these heavily):
@@ -361,8 +415,8 @@ export async function generateCuesForProblem(
 ${supplementaryProblems && supplementaryProblems.length > 0
   ? `- Similar problems from supplementary material:\n${supplementaryProblems.map((p, i) => `  ${i + 1}. ${p.content.slice(0, 200)}`).join("\n")}`
   : ""}
-Use this context to make cues exam-targeted: highlight where this problem connects to the above patterns, formulas, and tips.\n`
-    : "";
+${knowledgeBlocksBlock}Use this context to make cues exam-targeted: highlight where this problem connects to the above patterns, formulas, and tips.\n`
+    : knowledgeBlocksBlock;
 
   const prompt = `You are a math education expert. Generate exactly 5 cues for this math problem.
 
@@ -421,7 +475,7 @@ STRICT RULES:
 // 보조 PDF 분석: 인사이트(첫 10페이지) + 문제 전체 추출(청킹)
 export async function analyzeSupplementaryPDF(
   base64Data: string
-): Promise<{ insights: SupplementaryInsights; problems: RawProblem[] }> {
+): Promise<{ insights: SupplementaryInsights; problems: RawProblem[]; knowledgeBlocks: KnowledgeBlock[] }> {
   const model = getJsonModel();
 
   const pdfBytes = Buffer.from(base64Data, "base64");
@@ -450,15 +504,20 @@ Extract what this material emphasizes for exam preparation. Keep each list conci
     try { insights = parseGeminiJson(result.response.text()); break; } catch { /* retry */ }
   }
 
-  // 2. Extract all problems from full PDF (same chunking as main PDF)
+  // 2. Extract all problems and knowledge blocks from full PDF (same chunking as main PDF)
   const chunks = await splitPDFIntoChunks(base64Data);
   const problems: RawProblem[] = [];
+  const knowledgeBlocks: KnowledgeBlock[] = [];
   for (let i = 0; i < chunks.length; i++) {
-    const extracted = await extractProblemsFromChunk(chunks[i], i);
+    const [extracted, blocks] = await Promise.all([
+      extractProblemsFromChunk(chunks[i], i),
+      extractKnowledgeBlocksFromChunk(chunks[i]),
+    ]);
     problems.push(...extracted.problems);
+    knowledgeBlocks.push(...blocks);
   }
 
-  return { insights, problems };
+  return { insights, problems, knowledgeBlocks };
 }
 
 // Generate 1-2 targeted problems for a concept not covered by any extracted problem
@@ -491,12 +550,18 @@ Rules: problems must be fully self-contained — a student must be able to solve
 async function processChunksParallel(
   chunks: string[],
   concurrency: number
-): Promise<{ concepts: GeminiAnalysisResult["concepts"]; problems: RawExtractedProblem[] }[]> {
-  const results: { concepts: GeminiAnalysisResult["concepts"]; problems: RawExtractedProblem[] }[] = [];
+): Promise<{ concepts: GeminiAnalysisResult["concepts"]; problems: RawExtractedProblem[]; theorems: ExtractedTheorem[] }[]> {
+  const results: { concepts: GeminiAnalysisResult["concepts"]; problems: RawExtractedProblem[]; theorems: ExtractedTheorem[] }[] = [];
   for (let i = 0; i < chunks.length; i += concurrency) {
     const batch = chunks.slice(i, i + concurrency);
     const batchResults = await Promise.all(
-      batch.map((chunk, j) => extractProblemsFromChunk(chunk, i + j))
+      batch.map(async (chunk, j) => {
+        const [extracted, theorems] = await Promise.all([
+          extractProblemsFromChunk(chunk, i + j),
+          extractTheoremsFromChunk(chunk),
+        ]);
+        return { ...extracted, theorems };
+      })
     );
     results.push(...batchResults);
   }
@@ -517,10 +582,19 @@ export async function analyzePDF(
   const chunkResults = await processChunksParallel(chunks, CHUNK_CONCURRENCY);
   const allConcepts: GeminiAnalysisResult["concepts"] = [];
   const allRawProblems: RawExtractedProblem[] = [];
+  const allTheorems: ExtractedTheorem[] = [];
   for (const r of chunkResults) {
     allConcepts.push(...r.concepts);
     allRawProblems.push(...r.problems);
+    allTheorems.push(...r.theorems);
   }
+
+  // Deduplicate theorems by title
+  const theoremMap = new Map<string, ExtractedTheorem>();
+  for (const t of allTheorems) {
+    if (!theoremMap.has(t.title)) theoremMap.set(t.title, t);
+  }
+  const theorems = Array.from(theoremMap.values());
 
   // 개념 중복 제거 및 빈도 합산
   const conceptMap = new Map<string, GeminiAnalysisResult["concepts"][0]>();
@@ -560,6 +634,7 @@ export async function analyzePDF(
       concepts: Array.from(v.concepts),
     })),
     problems,
+    theorems,
   };
 }
 

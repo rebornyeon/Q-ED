@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { generateCuesForProblem } from "@/lib/gemini";
-import type { SupplementaryInsights } from "@/types";
+import type { KnowledgeBlock, SupplementaryInsights } from "@/types";
 
 export async function POST(request: NextRequest) {
   try {
@@ -43,6 +43,7 @@ export async function POST(request: NextRequest) {
 
   let supplementaryContext: SupplementaryInsights[] | undefined;
   let supplementaryProblems: { content: string }[] | undefined;
+  let knowledgeBlocks: KnowledgeBlock[] | undefined;
   if (problem?.document_id) {
     const { data: suppDocs } = await supabase
       .from("supplementary_documents")
@@ -57,11 +58,17 @@ export async function POST(request: NextRequest) {
         Array.isArray(d.problems) ? (d.problems as { content: string }[]) : []
       );
       if (allProblems.length > 0) supplementaryProblems = allProblems.slice(0, 10);
+      // Extract knowledge_blocks from insights
+      const allBlocks = suppDocs.flatMap((d) => {
+        const insights = d.insights as SupplementaryInsights;
+        return Array.isArray(insights?.knowledge_blocks) ? insights.knowledge_blocks : [];
+      });
+      if (allBlocks.length > 0) knowledgeBlocks = allBlocks;
     }
   }
 
   // Generate new cues with Gemini (enriched with supplementary context)
-  const generatedCues = await generateCuesForProblem(problemContent, supplementaryContext, supplementaryProblems);
+  const generatedCues = await generateCuesForProblem(problemContent, supplementaryContext, supplementaryProblems, knowledgeBlocks);
 
   if (generatedCues.length === 0) {
     return NextResponse.json({ cues: [] });

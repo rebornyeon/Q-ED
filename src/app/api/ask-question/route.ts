@@ -47,6 +47,7 @@ export async function POST(request: NextRequest) {
   // Fetch document title + session notes (textbook theorems already extracted)
   let docTitle = "";
   let notesContext = "";
+  let suppMaterialContext = "";
   if (problem.document_id) {
     const { data: doc } = await supabase
       .from("documents")
@@ -54,6 +55,27 @@ export async function POST(request: NextRequest) {
       .eq("id", problem.document_id)
       .single();
     if (doc?.title) docTitle = doc.title;
+
+    // Fetch supplementary knowledge_blocks for this document
+    const { data: suppDocs } = await supabase
+      .from("supplementary_documents")
+      .select("title, insights")
+      .eq("document_id", problem.document_id)
+      .eq("user_id", user.id);
+
+    if (suppDocs && suppDocs.length > 0) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const allBlocks = suppDocs.flatMap((d: any) => {
+        const blocks = d.insights?.knowledge_blocks;
+        return Array.isArray(blocks) ? blocks : [];
+      });
+      if (allBlocks.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        suppMaterialContext = allBlocks.slice(0, 10).map((b: any, i: number) =>
+          `${i + 1}. [${(b.type as string).charAt(0).toUpperCase() + (b.type as string).slice(1)}]${b.title ? ` ${b.title}` : ""}: ${(b.content as string).slice(0, 400)}`
+        ).join("\n\n");
+      }
+    }
   }
 
   // Pull study_notes for this session — these contain verbatim theorem statements from the textbook
@@ -126,7 +148,7 @@ ${problem.problem_number ? `Problem #: ${problem.problem_number}` : ""}
 Problem: ${problem.content}
 
 Concepts: ${(problem.concepts as string[]).join(", ")}
-${notesContext ? `\n--- TEXTBOOK THEOREMS (extracted from ${docTitle || "the textbook"}) ---\n${notesContext}\n` : ""}
+${notesContext ? `\n--- TEXTBOOK THEOREMS (extracted from ${docTitle || "the textbook"}) ---\n${notesContext}\n` : ""}${suppMaterialContext ? `\n--- SUPPLEMENTARY MATERIAL (worked solutions, theorems, notes) ---\n${suppMaterialContext}\n` : ""}
 --- CUES SHOWN TO STUDENT ---
 ${cueContext}`;
 

@@ -108,6 +108,7 @@ export interface SupplementaryInsights {
   key_formulas: string[];
   summary: string;
   doc_type?: SupplementaryDocType;
+  knowledge_blocks?: KnowledgeBlock[];
 }
 
 export interface RawProblem {
@@ -130,11 +131,29 @@ export interface SupplementaryDocument {
   created_at: string;
 }
 
+export interface ExtractedTheorem {
+  title: string;        // e.g. "Theorem 3.2: Rank-Nullity"
+  type: "theorem" | "definition" | "lemma" | "corollary" | "proposition";
+  content: string;      // exact LaTeX statement
+  page?: number | null;
+  section?: string | null;
+  concepts: string[];   // related concept names
+}
+
+export interface KnowledgeBlock {
+  type: "solution" | "theorem" | "note" | "formula" | "example";
+  title?: string;
+  content: string;      // full content with LaTeX
+  page?: number | null;
+  concepts: string[];
+}
+
 export interface GeminiAnalysisResult {
   concepts: Concept[];
   problems: GeneratedProblem[];
   problem_types: ProblemType[];
   summary: string;
+  theorems?: ExtractedTheorem[];
 }
 
 export interface GeneratedProblem {

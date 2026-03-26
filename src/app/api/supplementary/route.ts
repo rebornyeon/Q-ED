@@ -25,8 +25,8 @@ export async function POST(request: NextRequest) {
   }
 
   const buffer = Buffer.from(await fileData.arrayBuffer());
-  const { insights, problems } = await analyzeSupplementaryPDF(buffer.toString("base64"));
-  const insightsWithType = { ...insights, doc_type: docType };
+  const { insights, problems, knowledgeBlocks } = await analyzeSupplementaryPDF(buffer.toString("base64"));
+  const insightsWithType = { ...insights, doc_type: docType, knowledge_blocks: knowledgeBlocks };
 
   const { data: doc, error: dbError } = await supabase
     .from("supplementary_documents")
