@@ -165,7 +165,7 @@ ${cueContext}`;
   ];
 
   const chat = model.startChat({
-    systemInstruction: systemPrompt,
+    systemInstruction: { role: "user", parts: [{ text: systemPrompt }] },
     history: chatHistory,
   });
 
