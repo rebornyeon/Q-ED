@@ -84,7 +84,9 @@ STEP 1 — Detect explicit references: Check the problem text AND the hints/Q&A 
 - If YES: you MUST find and quote THAT exact theorem/definition from the PDF. Do not substitute a different one.
 - If NO: find the theorem or definition most essential for solving this problem.
 
-STEP 2 — Find it in the PDF: Locate the exact statement in the PDF text. Quote it verbatim.
+STEP 2 — Find it in the PDF: Locate the exact theorem/definition/lemma/proposition statement in the PDF text. Quote it verbatim.
+
+CRITICAL: You MUST return a THEOREM, DEFINITION, LEMMA, PROPOSITION, or COROLLARY — never an exercise, problem, or example. Exercises are what the student is already solving; they need the underlying theory. If the only thing you find is an exercise, look harder for the theorem or definition the exercise is testing.
 
 Return ONLY valid JSON (no markdown, no code blocks):
 {
@@ -97,6 +99,7 @@ Return ONLY valid JSON (no markdown, no code blocks):
 
 Rules:
 - NEVER write math expressions twice (no "$T+S$ T+S" — use LaTeX only)
+- NEVER save an exercise, problem, or example as the note — only theorems, definitions, lemmas, propositions, corollaries
 - CRITICAL: If the problem text OR any hint OR any Q&A answer explicitly names a theorem/definition (e.g. "Theorem 56", "Definition 3.2"), that is the one to save — find it in the PDF and quote it exactly. Do not substitute.
 - If no specific theorem found, use title "Key Concept: [name]" and reference the nearest page`;
 

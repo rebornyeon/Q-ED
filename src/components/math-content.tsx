@@ -26,8 +26,29 @@ function fixLatexBackslashes(tex: string): string {
   tex = tex.replace(
     /(\\begin\{[bpvVm]?matrix\*?\})([\s\S]*?)(\\end\{[bpvVm]?matrix\*?\})/g,
     (_, open, body, close) => {
+      let fixedBody = body;
       // Add \\ before any newline not already preceded by \\
-      const fixedBody = body.replace(/(?<!\\)\n/g, ' \\\\\n');
+      fixedBody = fixedBody.replace(/(?<!\\)\n/g, ' \\\\\n');
+      // If still no \\ row separators present, infer rows from & count.
+      // e.g. "1 & 2 & 3 4 & 5 & 6" → 2 cols per row means insert \\ after every 2nd &
+      if (!/\\\\/.test(fixedBody) && fixedBody.includes('&')) {
+        const ampCount = (fixedBody.match(/&/g) ?? []).length;
+        // Try to find column count: look for repeating groups.
+        // Heuristic: assume square-ish — try cols = 1,2,3... up to sqrt(ampCount+1)
+        // Pick cols where (ampCount+1) % (cols+1) === 0
+        let cols = 0;
+        for (let c = 1; c <= Math.ceil(Math.sqrt(ampCount + 1)) + 1; c++) {
+          if ((ampCount + 1) % (c + 1) === 0) { cols = c; break; }
+        }
+        if (cols > 0) {
+          // Insert \\ after every `cols`-th &
+          let count = 0;
+          fixedBody = fixedBody.replace(/&/g, (m) => {
+            count++;
+            return count % cols === 0 ? `& \\\\\n` : m;
+          });
+        }
+      }
       return open + fixedBody + close;
     }
   );
@@ -93,7 +114,15 @@ function renderMathText(text: string): string {
     return `\x00DISPLAY${idx}\x00`;
   });
 
-  // 2. Render inline math from queue
+  // 3. Markdown: bold **text**, italic *text*
+  // Run BEFORE restoring inline math so KaTeX HTML doesn't interfere.
+  // Bold: greedy within **, but stops at newline to prevent cross-paragraph runaway.
+  result = result.replace(/\*\*([^*\n]+(?:\n(?!\n)[^*\n]*)*)\*\*/g, "<strong>$1</strong>");
+  // Also handle **heading:** pattern where bold ends with colon (common Gemini output)
+  result = result.replace(/^(\*\*)((?:[^*\n]|\*(?!\*))+:\s*)$/gm, '<strong>$2</strong>');
+  result = result.replace(/\*(?!\*)([^*\n]+?)\*(?!\*)/g, "<em>$1</em>");
+
+  // 2. Render inline math from queue (after bold/italic so KaTeX HTML doesn't confuse regex)
   result = result.replace(/\x00INLINE(\d+)\x00/g, (_, idx) => {
     const tex = inlineQueue[Number(idx)];
     try {
@@ -102,13 +131,6 @@ function renderMathText(text: string): string {
       return `<span class="text-destructive">${escapeHtml(tex)}</span>`;
     }
   });
-
-  // 3. Markdown: bold **text**, italic *text*
-  // Bold: content between ** cannot itself contain ** (prevents runaway cross-paragraph matching)
-  result = result.replace(/\*\*((?:[^*]|\*(?!\*))+)\*\*/g, "<strong>$1</strong>");
-  // Also handle **heading:** at line start where closing ** is on next line
-  result = result.replace(/^(\*\*)((?:[^*\n]|\*(?!\*))+:\s*)\n/gm, '<strong>$2</strong>\n');
-  result = result.replace(/\*(?!\*)(.+?)\*(?!\*)/g, "<em>$1</em>");
 
   // 4a. Numbered list items: lines starting with "1." "2." etc → styled divs
   result = result.replace(/^(\d+)\.\s+(.+)$/gm, (_, num, content) =>
