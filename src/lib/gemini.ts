@@ -248,7 +248,9 @@ Rules:
 - Extract ALL problems from the PDF.
 - content MUST include the COMPLETE problem statement — all given information, conditions, constraints, definitions, and what the student needs to find, prove, or compute. A student must be able to solve the problem from the content alone without looking at the PDF. Do NOT truncate or summarize.
 - Use LaTeX notation for all math: inline $x^2$, $\\frac{a}{b}$, $\\int_0^1 f(x)\\,dx$.
-- If a problem references a figure, matrix, table, or equation from the textbook, reproduce the relevant data in the content (e.g. write out the matrix, describe the figure, state the equation).
+- MATRICES: Always use display-block LaTeX — NEVER plain text. Example: $$\\begin{bmatrix} 1 & 2 \\\\ 3 & 4 \\end{bmatrix}$$ Never write "1 2 / 3 4" or space-separated columns.
+- STANDALONE EQUATIONS: Any formula, equation, or expression that stands on its own line in the PDF must be a display block $$...$$, not inline.
+- If a problem references a figure, matrix, table, or equation from the textbook, reproduce the relevant data in the content using proper LaTeX (e.g. \\begin{bmatrix} for matrices, \\begin{cases} for piecewise, \\begin{align*} for systems).
 - difficulty/frequency are integers 1-5.
 - section: exact chapter or section heading from the PDF.
 - page: PDF page number (integer), null if unknown.
@@ -464,7 +466,7 @@ async function generateTargetedProblems(conceptName: string): Promise<RawExtract
 Return JSON array only:
 [{"content":"Complete problem statement with all given info and what to find/prove. Use $LaTeX$ for math.","problem_type":"str","difficulty":3,"concepts":["${conceptName}"],"section":null,"page":null,"problem_number":null}]
 
-Rules: problems must be fully self-contained — a student must be able to solve each problem from the content alone. Include all given values, conditions, and what to compute/prove. Use LaTeX for math notation. difficulty 1-5. Return 1 if concept is narrow, 2 if broad.`;
+Rules: problems must be fully self-contained — a student must be able to solve each problem from the content alone. Include all given values, conditions, and what to compute/prove. Use LaTeX for math notation. MATRICES: always $$\\begin{bmatrix}...\\end{bmatrix}$$, never plain text. difficulty 1-5. Return 1 if concept is narrow, 2 if broad.`;
 
   for (let attempt = 0; attempt < 2; attempt++) {
     const result = await model.generateContent(prompt);
@@ -583,7 +585,7 @@ Instructions:
 4. Match the difficulty level (${original.difficulty}/5) and problem type
 5. Each problem MUST be fully self-contained — include all given information, conditions, matrices, equations, and what to find/prove. A student must be able to solve it from the content alone.
 
-Return JSON array only:
+Return JSON array only — MATRICES must use $$\\begin{bmatrix}...\\end{bmatrix}$$, never plain text:
 [{"content":"Complete problem statement with all given info. Use $LaTeX$ for math.","problem_type":"${original.problem_type}","difficulty":${original.difficulty},"concepts":${JSON.stringify(original.concepts)},"section":${JSON.stringify(original.section)},"page":null,"problem_number":null}]
 
 Return exactly ${count} objects. All text in English.`;

@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { problemId, sessionId } = await request.json();
+  const { problemId, sessionId, cuesUsed, qaHistory } = await request.json();
 
   // Check if note already exists for this exact problem
   const { data: existing } = await supabase
@@ -63,25 +63,41 @@ export async function POST(request: NextRequest) {
   const conceptsStr = Array.isArray(problem.concepts) ? problem.concepts.join(", ") : "";
   const sectionStr = problem.section ? `\nSection: ${problem.section}` : "";
 
+  const cuesBlock = cuesUsed && cuesUsed.length > 0
+    ? `\n\nHINTS THE STUDENT USED:\n${cuesUsed.map((c: { level: number; content: string; why?: string }) =>
+        `[L${c.level}] ${c.content}${c.why ? `\n  Why: ${c.why}` : ""}`
+      ).join("\n")}`
+    : "";
+
+  const qaBlock = qaHistory && qaHistory.length > 0
+    ? `\n\nQ&A DURING SOLVING:\n${qaHistory.map((h: { q: string; a: string }, i: number) =>
+        `Q${i + 1}: ${h.q}\nA${i + 1}: ${h.a}`
+      ).join("\n\n")}`
+    : "";
+
   const prompt = `You are analyzing a math textbook PDF. A student just worked on this problem:
 
 Problem: ${problem.content}
-Concepts: ${conceptsStr}${sectionStr}
+Concepts: ${conceptsStr}${sectionStr}${cuesBlock}${qaBlock}
 
-Find the KEY theorem, definition, or formula from this textbook PDF that is MOST essential for solving this problem.
+STEP 1 — Detect explicit references: Check the problem text AND the hints/Q&A above for any explicitly named theorem, definition, or lemma (e.g. "Theorem 56", "Definition 3.2"). If a theorem was mentioned or used in the hints or Q&A, prioritize finding that exact theorem in the PDF. Does the problem explicitly name a theorem, definition, or lemma by number or name? (e.g. "use Theorem 56", "by Definition 3.2", "applying Lemma 4.1")
+- If YES: you MUST find and quote THAT exact theorem/definition from the PDF. Do not substitute a different one.
+- If NO: find the theorem or definition most essential for solving this problem.
+
+STEP 2 — Find it in the PDF: Locate the exact statement in the PDF text. Quote it verbatim.
 
 Return ONLY valid JSON (no markdown, no code blocks):
 {
-  "title": "Full name, e.g. 'Theorem 3.2: Linearity of Transformations'",
-  "reference": "Short reference, e.g. 'Theorem 3.2, p.47' or 'Definition 2.1, p.23'",
-  "page": 47,
-  "content": "The exact statement from the textbook. Use LaTeX: $...$ for inline math, $$...$$ for display math. Use \\n for line breaks between parts.",
-  "summary": "One sentence: why this theorem/definition is the key to solving the problem above."
+  "title": "Full name as it appears in the PDF, e.g. 'Theorem 56: Invertibility Criterion'",
+  "reference": "Short reference, e.g. 'Theorem 56, p.183' or 'Definition 2.1, p.23'",
+  "page": 183,
+  "content": "The EXACT statement copied from the PDF. Use LaTeX: $...$ for inline math, $$...$$ for display math. Matrices must use $$\\begin{bmatrix}...\\end{bmatrix}$$. Use \\n for line breaks.",
+  "summary": "One sentence: why this theorem is the key to solving the problem."
 }
 
 Rules:
 - NEVER write math expressions twice (no "$T+S$ T+S" — use LaTeX only)
-- If multiple theorems apply, pick the MOST essential one
+- CRITICAL: If the problem text OR any hint OR any Q&A answer explicitly names a theorem/definition (e.g. "Theorem 56", "Definition 3.2"), that is the one to save — find it in the PDF and quote it exactly. Do not substitute.
 - If no specific theorem found, use title "Key Concept: [name]" and reference the nearest page`;
 
   const result = await model.generateContent([

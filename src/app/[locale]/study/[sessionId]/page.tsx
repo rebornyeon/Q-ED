@@ -401,12 +401,20 @@ export default function StudySessionPage({
       }
     }
 
-    // Fire-and-forget note generation
+    // Fire-and-forget note generation — pass hints used + Q&A as context
     setGeneratingNoteFor(currentProblem.id);
+    const revealedCues = cues
+      .filter((c) => c.cue_level <= revealedLevel)
+      .map((c) => ({ level: c.cue_level, content: c.content, why: c.why_explanation }));
     fetch("/api/notes/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ problemId: currentProblem.id, sessionId }),
+      body: JSON.stringify({
+        problemId: currentProblem.id,
+        sessionId,
+        cuesUsed: revealedCues.length > 0 ? revealedCues : undefined,
+        qaHistory: askHistory.length > 0 ? askHistory.map((h) => ({ q: h.q, a: h.a })) : undefined,
+      }),
     }).then(() => setGeneratingNoteFor(null)).catch(() => setGeneratingNoteFor(null));
   }
 
@@ -495,6 +503,7 @@ export default function StudySessionPage({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           problemId: currentProblem.id,
+          sessionId,
           question: q || "What is shown in this image?",
           history: askHistory,
           imageBase64: imgSnapshot?.base64 ?? null,

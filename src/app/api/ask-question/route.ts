@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { problemId, question, history, imageBase64, imageMimeType, clientCues } = await request.json();
+  const { problemId, sessionId, question, history, imageBase64, imageMimeType, clientCues } = await request.json();
 
   if (!problemId || !question) {
     return NextResponse.json({ error: "problemId and question are required" }, { status: 400 });
@@ -44,8 +44,9 @@ export async function POST(request: NextRequest) {
     ? cueSource.map((c: { cue_level: number; cue_type: string; content: string; why_explanation: string }) => `Level ${c.cue_level} (${c.cue_type}): ${c.content}\nWhy: ${c.why_explanation}`).join("\n\n")
     : "No cues available yet.";
 
-  // Fetch document title if available
+  // Fetch document title + session notes (textbook theorems already extracted)
   let docTitle = "";
+  let notesContext = "";
   if (problem.document_id) {
     const { data: doc } = await supabase
       .from("documents")
@@ -55,10 +56,21 @@ export async function POST(request: NextRequest) {
     if (doc?.title) docTitle = doc.title;
   }
 
-  // Build conversation history block
-  const historyBlock = priorQA.length > 0
-    ? `--- PRIOR CONVERSATION (the student already asked these questions — DO NOT repeat answers, build on them) ---\n${priorQA.map((h, i) => `Q${i + 1}: ${h.q}\nA${i + 1}: ${h.a}`).join("\n\n")}\n\n`
-    : "";
+  // Pull study_notes for this session — these contain verbatim theorem statements from the textbook
+  const { data: sessionNotes } = await supabase
+    .from("study_notes")
+    .select("title, reference, content, summary")
+    .eq("session_id", sessionId ?? "")
+    .order("created_at", { ascending: false })
+    .limit(10);
+
+  if (sessionNotes && sessionNotes.length > 0) {
+    notesContext = sessionNotes
+      .map((n: { title: string; reference: string; content: string; summary: string }) =>
+        `### ${n.title} (${n.reference})\n${n.content}${n.summary ? `\n→ ${n.summary}` : ""}`
+      )
+      .join("\n\n");
+  }
 
   // Use Gemini to answer
   const { GoogleGenerativeAI } = await import("@google/generative-ai");
@@ -93,9 +105,10 @@ export async function POST(request: NextRequest) {
     PROCEDURAL_RE.test(q) ? "PROCEDURAL" :
     "AUTO";
 
-  const prompt = `You are a concise math tutor. Answer the student's question below.
+  // System prompt — context that is constant across all turns
+  const systemPrompt = `You are a concise math tutor helping a student work through a specific problem.
 
-INTENT: ${intent}
+INTENT FOR THIS QUESTION: ${intent}
 ${intentInstructions[intent]}
 
 FORMAT RULES:
@@ -103,7 +116,6 @@ FORMAT RULES:
 - Each step: ≤ 3 sentences, one focused idea
 - Use LaTeX for all math: inline $x^2$, display $$\\begin{align*}...\\end{align*}$$
 - No preamble, no "great question", no "let's think about"
-- Build on prior conversation — never repeat what was already explained
 - Write in English
 
 --- PROBLEM CONTEXT ---
@@ -114,18 +126,27 @@ ${problem.problem_number ? `Problem #: ${problem.problem_number}` : ""}
 Problem: ${problem.content}
 
 Concepts: ${(problem.concepts as string[]).join(", ")}
-
+${notesContext ? `\n--- TEXTBOOK THEOREMS (extracted from ${docTitle || "the textbook"}) ---\n${notesContext}\n` : ""}
 --- CUES SHOWN TO STUDENT ---
-${cueContext}
+${cueContext}`;
 
-${historyBlock}--- STUDENT'S QUESTION ---
-${question}`;
+  // Build real chat history so Gemini maintains conversation state
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const chatHistory: any[] = priorQA.flatMap((h) => [
+    { role: "user", parts: [{ text: h.q }] },
+    { role: "model", parts: [{ text: h.a }] },
+  ]);
 
-  const result = await model.generateContent(
-    imageBase64 && imageMimeType
-      ? [{ inlineData: { data: imageBase64, mimeType: imageMimeType } }, prompt]
-      : prompt
-  );
+  const chat = model.startChat({
+    systemInstruction: systemPrompt,
+    history: chatHistory,
+  });
+
+  const userParts = imageBase64 && imageMimeType
+    ? [{ inlineData: { data: imageBase64, mimeType: imageMimeType } }, { text: question }]
+    : [{ text: question }];
+
+  const result = await chat.sendMessage(userParts);
   const answer = result.response.text().trim();
 
   return NextResponse.json({ answer });
