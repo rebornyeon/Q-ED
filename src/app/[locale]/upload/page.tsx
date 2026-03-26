@@ -46,7 +46,7 @@ type FileTOCData = {
   fileId: string;
   totalPages: number;
   chapters: TOCChapter[];
-  maxSelectableChapters: number;
+  maxSelectablePages: number;
   selectedIndices: Set<number>;
 };
 
@@ -198,7 +198,7 @@ export default function UploadPage() {
           fileId: toc.fileId,
           totalPages: toc.totalPages,
           chapters: toc.chapters,
-          maxSelectableChapters: toc.maxSelectableChapters,
+          maxSelectablePages: toc.maxSelectablePages,
           selectedIndices: new Set(),
         });
         anyNeedsSelection = true;
@@ -274,8 +274,12 @@ export default function UploadPage() {
       const sel = new Set(data.selectedIndices);
       if (sel.has(chapterIdx)) {
         sel.delete(chapterIdx);
-      } else if (sel.size < data.maxSelectableChapters) {
-        sel.add(chapterIdx);
+      } else {
+        const selectedPages = Array.from(sel).reduce((sum, i) => sum + data.chapters[i].pageCount, 0);
+        const addingPages = data.chapters[chapterIdx].pageCount;
+        if (selectedPages + addingPages <= data.maxSelectablePages) {
+          sel.add(chapterIdx);
+        }
       }
       next.set(fileId, { ...data, selectedIndices: sel });
       return next;
@@ -467,15 +471,21 @@ export default function UploadPage() {
                 <Card key={data.fileId}>
                   <CardHeader className="pb-2">
                     <CardTitle className="text-base">{entry?.title || entry?.file.name}</CardTitle>
-                    <p className="text-xs text-muted-foreground">
-                      {data.totalPages} pages total · Select up to <span className="font-semibold text-foreground">{data.maxSelectableChapters}</span> chapter{data.maxSelectableChapters > 1 ? "s" : ""}
-                      {" "}· {data.selectedIndices.size}/{data.maxSelectableChapters} selected
-                    </p>
+                    {(() => {
+                      const selectedPages = Array.from(data.selectedIndices).reduce((sum, i) => sum + data.chapters[i].pageCount, 0);
+                      return (
+                        <p className="text-xs text-muted-foreground">
+                          {data.totalPages} pages total · 분석 한도 <span className="font-semibold text-foreground">{data.maxSelectablePages}</span>p
+                          {" "}· <span className={selectedPages > data.maxSelectablePages * 0.9 ? "text-orange-500 font-semibold" : ""}>{selectedPages}/{data.maxSelectablePages}p</span> 선택됨
+                        </p>
+                      );
+                    })()}
                   </CardHeader>
                   <CardContent className="space-y-1.5">
                     {data.chapters.map((ch, idx) => {
                       const isSelected = data.selectedIndices.has(idx);
-                      const isDisabled = !isSelected && data.selectedIndices.size >= data.maxSelectableChapters;
+                      const selectedPages = Array.from(data.selectedIndices).reduce((sum, i) => sum + data.chapters[i].pageCount, 0);
+                      const isDisabled = !isSelected && selectedPages + ch.pageCount > data.maxSelectablePages;
                       return (
                         <button
                           key={idx}
