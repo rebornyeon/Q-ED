@@ -17,7 +17,7 @@ import { Progress } from "@/components/ui/progress";
 import {
   ChevronLeft, ChevronRight, Trophy, AlertTriangle,
   Loader2, List, BookPlus, CopyPlus, CheckSquare, Square, Check,
-  MessageCircleQuestion, Send, ChevronDown, ChevronUp, Sparkles, ImageIcon, X, Plus, FileText, ExternalLink,
+  MessageCircleQuestion, Send, ChevronDown, ChevronUp, Sparkles, ImageIcon, X, Plus, FileText, ExternalLink, Printer,
 } from "lucide-react";
 import {
   Sheet, SheetTrigger, SheetContent, SheetHeader, SheetTitle,
@@ -486,6 +486,89 @@ export default function StudySessionPage({
       setAskImage({ base64, mimeType: file.type, preview: dataUrl });
     };
     reader.readAsDataURL(file);
+  }
+
+  function handlePrintSession() {
+    const title = sessionTitle ?? "Study Session";
+    const cards = problems.map((p, i) => {
+      const ratings = ratingHistory.get(p.id) ?? [];
+      const lastRating = ratings.at(-1);
+      const ratingBadge = lastRating
+        ? `<span style="font-size:9px;padding:1px 6px;border-radius:999px;background:${lastRating === "easy" ? "#dcfce7" : lastRating === "good" ? "#dbeafe" : lastRating === "hard" ? "#fef9c3" : "#fee2e2"};color:${lastRating === "easy" ? "#166534" : lastRating === "good" ? "#1e40af" : lastRating === "hard" ? "#854d0e" : "#991b1b"}">${lastRating.toUpperCase()}</span>`
+        : "";
+      const diffDots = "●".repeat(p.difficulty ?? 1) + "○".repeat(Math.max(0, 5 - (p.difficulty ?? 1)));
+      return `
+        <div class="problem-card">
+          <div class="problem-header">
+            <span class="problem-num">#${i + 1}</span>
+            ${p.problem_number ? `<span class="problem-label">${p.problem_number}</span>` : ""}
+            ${p.section ? `<span class="section">${p.section}</span>` : ""}
+            <span style="flex:1"></span>
+            <span class="diff">${diffDots}</span>
+            ${ratingBadge}
+          </div>
+          <div class="problem-content">${p.content.replace(/\n/g, "<br>")}</div>
+          <div class="answer-space"></div>
+        </div>`;
+    }).join("");
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${title} — Problems</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"><\/script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"><\/script>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: "Georgia", serif; max-width: 700px; margin: 0 auto; padding: 24px 20px; color: #111; font-size: 11.5px; line-height: 1.7; }
+    h1 { font-size: 15px; font-weight: bold; margin: 0 0 4px; }
+    .meta { font-size: 10px; color: #6b7280; margin-bottom: 20px; border-bottom: 2px solid #111; padding-bottom: 8px; }
+    .problem-card { page-break-inside: avoid; margin-bottom: 22px; border: 1px solid #d1d5db; border-radius: 6px; padding: 12px 15px; }
+    .problem-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+    .problem-num { font-weight: bold; font-size: 12px; background: #111; color: #fff; border-radius: 4px; padding: 1px 7px; }
+    .problem-label { font-size: 10px; font-family: monospace; background: #f3f4f6; color: #374151; padding: 1px 6px; border-radius: 4px; }
+    .section { font-size: 10px; color: #6b7280; font-style: italic; }
+    .diff { font-size: 9px; color: #d1d5db; letter-spacing: -1px; }
+    .problem-content { font-size: 11.5px; line-height: 1.75; margin-bottom: 12px; }
+    .answer-space { border-top: 1px dashed #d1d5db; margin-top: 8px; min-height: 80px; }
+    .katex-display { overflow-x: auto; margin: 8px 0; }
+    .katex { font-size: 1em; }
+    @media print {
+      body { padding: 14px 16px; }
+      .problem-card { margin-bottom: 18px; border-color: #9ca3af; }
+      .answer-space { min-height: 60px; }
+    }
+  </style>
+</head>
+<body>
+  <h1>${title}</h1>
+  <div class="meta">${problems.length} problems · printed ${new Date().toLocaleDateString()}</div>
+  ${cards}
+  <script>
+    document.addEventListener("DOMContentLoaded", function() {
+      renderMathInElement(document.body, {
+        delimiters: [
+          { left: "$$", right: "$$", display: true },
+          { left: "$", right: "$", display: false }
+        ],
+        throwOnError: false
+      });
+      setTimeout(() => window.print(), 800);
+    });
+  <\/script>
+</body>
+</html>`;
+
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, "_blank");
+    if (!win) {
+      const a = document.createElement("a");
+      a.href = url; a.download = `${title}-problems.html`; a.click();
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
   }
 
   async function handleAsk() {
@@ -1014,6 +1097,10 @@ export default function StudySessionPage({
               generatingNoteFor={generatingNoteFor}
               onNoteGenerated={() => {}}
             />
+            <Button variant="ghost" size="sm" className="gap-1.5 text-xs h-8" onClick={handlePrintSession} title="Print all problems">
+              <Printer className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Print</span>
+            </Button>
             <Button variant="ghost" size="sm" className="gap-1.5 text-xs h-8" onClick={() => router.push(`/${locale}/study`)}>
               <ChevronLeft className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Study Sessions</span>

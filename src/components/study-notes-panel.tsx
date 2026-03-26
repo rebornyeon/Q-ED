@@ -117,18 +117,24 @@ export function StudyNotesPanel({ sessionId, generatingNoteFor, onNoteGenerated 
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"><\/script>
   <style>
     * { box-sizing: border-box; }
-    body { font-family: "Georgia", serif; max-width: 700px; margin: 0 auto; padding: 20px 18px; color: #111; font-size: 12px; }
-    h1 { font-size: 16px; font-weight: bold; margin-bottom: 14px; border-bottom: 2px solid #111; padding-bottom: 6px; }
-    .note-card { page-break-inside: avoid; margin-bottom: 14px; border: 1px solid #ddd; border-radius: 8px; padding: 12px 14px; }
-    .note-header { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
-    .note-title { font-size: 13px; font-weight: bold; line-height: 1.4; }
-    .note-ref { font-size: 10px; font-family: monospace; background: #f0f4ff; color: #3730a3; padding: 1px 6px; border-radius: 999px; white-space: nowrap; }
-    .note-summary { font-size: 11px; color: #555; font-style: italic; margin-bottom: 6px; }
-    .note-content { font-size: 12px; line-height: 1.65; }
-    .note-user { margin-top: 8px; padding: 7px 10px; background: #eff6ff; color: #1d4ed8; border-left: 3px solid #3b82f6; border-radius: 5px; font-size: 11px; }
-    .katex-display { overflow-x: auto; margin: 0.5em 0; }
-    .katex { font-size: 0.95em; }
-    @media print { body { padding: 12px; } .note-card { border-color: #ccc; margin-bottom: 10px; } }
+    body { font-family: "Georgia", serif; max-width: 680px; margin: 0 auto; padding: 24px 20px; color: #111; font-size: 11.5px; line-height: 1.7; }
+    h1 { font-size: 15px; font-weight: bold; margin: 0 0 18px; border-bottom: 2px solid #111; padding-bottom: 7px; letter-spacing: 0.01em; }
+    .note-card { page-break-inside: avoid; margin-bottom: 20px; border: 1px solid #d1d5db; border-radius: 6px; padding: 14px 16px; }
+    .note-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 5px; }
+    .note-title { font-size: 12.5px; font-weight: bold; line-height: 1.45; }
+    .note-ref { font-size: 9.5px; font-family: monospace; background: #eef2ff; color: #3730a3; padding: 2px 7px; border-radius: 999px; white-space: nowrap; flex-shrink: 0; margin-top: 2px; }
+    .note-summary { font-size: 10.5px; color: #4b5563; font-style: italic; margin: 0 0 10px; line-height: 1.5; padding-bottom: 8px; border-bottom: 1px solid #e5e7eb; }
+    .note-content { font-size: 11.5px; line-height: 1.75; }
+    .note-content p { margin: 0 0 8px; }
+    .note-user { margin-top: 12px; padding: 8px 11px; background: #eff6ff; color: #1d4ed8; border-left: 3px solid #3b82f6; border-radius: 4px; font-size: 11px; line-height: 1.6; }
+    .note-user strong { display: block; margin-bottom: 3px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: #1e40af; }
+    .katex-display { overflow-x: auto; margin: 10px 0; }
+    .katex { font-size: 1em; }
+    @media print {
+      body { padding: 14px 16px; }
+      .note-card { margin-bottom: 16px; border-color: #9ca3af; }
+      .note-summary { border-bottom-color: #d1d5db; }
+    }
   </style>
 </head>
 <body>
