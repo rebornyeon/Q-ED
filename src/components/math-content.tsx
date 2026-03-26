@@ -22,6 +22,15 @@ export function MathContent({ children, className = "" }: Props) {
 
 // Fix common LLM-generated LaTeX issues before passing to KaTeX
 function fixLatexBackslashes(tex: string): string {
+  // Inside matrix environments, bare newlines between rows need \\ row separators
+  tex = tex.replace(
+    /(\\begin\{[bpvVm]?matrix\*?\})([\s\S]*?)(\\end\{[bpvVm]?matrix\*?\})/g,
+    (_, open, body, close) => {
+      // Add \\ before any newline not already preceded by \\
+      const fixedBody = body.replace(/(?<!\\)\n/g, ' \\\\\n');
+      return open + fixedBody + close;
+    }
+  );
   // Single \ before space/newline → \\ (matrix row separator stored incorrectly by LLMs)
   tex = tex.replace(/(?<!\\)\\ /g, '\\\\ ');
   tex = tex.replace(/(?<!\\)\\\n/g, '\\\\\n');
@@ -95,7 +104,10 @@ function renderMathText(text: string): string {
   });
 
   // 3. Markdown: bold **text**, italic *text*
-  result = result.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  // Bold: content between ** cannot itself contain ** (prevents runaway cross-paragraph matching)
+  result = result.replace(/\*\*((?:[^*]|\*(?!\*))+)\*\*/g, "<strong>$1</strong>");
+  // Also handle **heading:** at line start where closing ** is on next line
+  result = result.replace(/^(\*\*)((?:[^*\n]|\*(?!\*))+:\s*)\n/gm, '<strong>$2</strong>\n');
   result = result.replace(/\*(?!\*)(.+?)\*(?!\*)/g, "<em>$1</em>");
 
   // 4a. Numbered list items: lines starting with "1." "2." etc → styled divs

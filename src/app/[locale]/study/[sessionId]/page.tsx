@@ -507,7 +507,7 @@ export default function StudySessionPage({
             <span class="diff">${diffDots}</span>
             ${ratingBadge}
           </div>
-          <div class="problem-content">${p.content.replace(/\n/g, "<br>")}</div>
+          <div class="problem-content">${p.content}</div>
           <div class="answer-space"></div>
         </div>`;
     }).join("");
@@ -531,7 +531,7 @@ export default function StudySessionPage({
     .problem-label { font-size: 10px; font-family: monospace; background: #f3f4f6; color: #374151; padding: 1px 6px; border-radius: 4px; }
     .section { font-size: 10px; color: #6b7280; font-style: italic; }
     .diff { font-size: 9px; color: #d1d5db; letter-spacing: -1px; }
-    .problem-content { font-size: 11.5px; line-height: 1.75; margin-bottom: 12px; }
+    .problem-content { font-size: 11.5px; line-height: 1.75; margin-bottom: 12px; white-space: pre-wrap; }
     .answer-space { border-top: 1px dashed #d1d5db; margin-top: 8px; min-height: 80px; }
     .katex-display { overflow-x: auto; margin: 8px 0; }
     .katex { font-size: 1em; }
