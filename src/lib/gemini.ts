@@ -451,14 +451,15 @@ Return JSON array with exactly 5 elements — no other text:
   {
     "cue_type": "kill_shot",
     "cue_level": 4,
-    "content": "Solution path:\\n1. [step]\\n2. [step]\\n3. [step]\\n4. [final answer form]",
+    "content": "**Full Solution**\\n\\n[Write the complete step-by-step solution with ALL calculations shown. Every step must be explicit — no skipping. Use numbered steps. Show all intermediate algebra and LaTeX math. End with the final answer clearly stated.]",
     "why_explanation": "[The key insight that unlocks the whole problem — 1 sentence]"
   }
 ]
 
 STRICT RULES:
 - Level 1 content MUST start with **Theorem/Formula Name** then a LaTeX block $$...$$
-- Level 2-4 content: under 35 words each
+- Level 2-3 content: under 35 words each
+- Level 4 content: FULL detailed solution — every calculation step shown, no truncation, no "..." placeholders
 - why_explanation for level 1: explain WHY the theorem is true mathematically (intuition), NOT how to apply it
 - why_explanation for levels 2-4: 1 sentence on why that step/mapping is valid
 - All text in English. Use actual newline characters (\\n) in JSON strings for line breaks.`;
