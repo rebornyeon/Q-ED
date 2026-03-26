@@ -532,13 +532,13 @@ export default function StudySessionPage({
     .section { font-size: 10px; color: #6b7280; font-style: italic; }
     .diff { font-size: 9px; color: #d1d5db; letter-spacing: -1px; }
     .problem-content { font-size: 11.5px; line-height: 1.75; margin-bottom: 12px; white-space: pre-wrap; }
-    .answer-space { border-top: 1px dashed #d1d5db; margin-top: 8px; min-height: 80px; }
+    .answer-space { border-top: 1px dashed #d1d5db; margin-top: 12px; min-height: 220px; }
     .katex-display { overflow-x: auto; margin: 8px 0; }
     .katex { font-size: 1em; }
     @media print {
       body { padding: 14px 16px; }
       .problem-card { margin-bottom: 18px; border-color: #9ca3af; }
-      .answer-space { min-height: 60px; }
+      .answer-space { min-height: 200px; }
     }
   </style>
 </head>
