@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
     .select("title, reference, content, summary")
     .eq("session_id", sessionId ?? "")
     .order("created_at", { ascending: false })
-    .limit(10);
+    .limit(5);
 
   if (sessionNotes && sessionNotes.length > 0) {
     notesContext = sessionNotes
@@ -127,7 +127,8 @@ export async function POST(request: NextRequest) {
     PROCEDURAL_RE.test(q) ? "PROCEDURAL" :
     "AUTO";
 
-  // System prompt — context that is constant across all turns
+  // Keep systemInstruction short — Gemini rejects overly long system prompts.
+  // Long context (problem, theorems, cues) goes into the first history turn instead.
   const systemPrompt = `You are a concise math tutor helping a student work through a specific problem.
 
 INTENT FOR THIS QUESTION: ${intent}
@@ -138,26 +139,30 @@ FORMAT RULES:
 - Each step: ≤ 3 sentences, one focused idea
 - Use LaTeX for all math: inline $x^2$, display $$\\begin{align*}...\\end{align*}$$
 - No preamble, no "great question", no "let's think about"
-- Write in English
+- Write in English`;
 
---- PROBLEM CONTEXT ---
-${docTitle ? `Source: ${docTitle}` : ""}
-${problem.section ? `Section: ${problem.section}` : ""}
-${problem.problem_number ? `Problem #: ${problem.problem_number}` : ""}
+  // Build context block injected as the first user turn in history
+  const contextBlock = `[CONTEXT — read before answering]
+${docTitle ? `Source: ${docTitle}` : ""}${problem.section ? `\nSection: ${problem.section}` : ""}${problem.problem_number ? `\nProblem #: ${problem.problem_number}` : ""}
 
 Problem: ${problem.content}
 
 Concepts: ${(problem.concepts as string[]).join(", ")}
-${notesContext ? `\n--- TEXTBOOK THEOREMS (extracted from ${docTitle || "the textbook"}) ---\n${notesContext}\n` : ""}${suppMaterialContext ? `\n--- SUPPLEMENTARY MATERIAL (worked solutions, theorems, notes) ---\n${suppMaterialContext}\n` : ""}
---- CUES SHOWN TO STUDENT ---
+${notesContext ? `\n--- TEXTBOOK THEOREMS ---\n${notesContext}\n` : ""}${suppMaterialContext ? `\n--- SUPPLEMENTARY MATERIAL ---\n${suppMaterialContext}\n` : ""}
+--- HINTS SHOWN TO STUDENT ---
 ${cueContext}`;
 
-  // Build real chat history so Gemini maintains conversation state
+  // Build real chat history so Gemini maintains conversation state.
+  // Inject context as the very first exchange so it stays in the conversation window.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const chatHistory: any[] = priorQA.flatMap((h) => [
-    { role: "user", parts: [{ text: h.q }] },
-    { role: "model", parts: [{ text: h.a }] },
-  ]);
+  const chatHistory: any[] = [
+    { role: "user", parts: [{ text: contextBlock }] },
+    { role: "model", parts: [{ text: "Understood. I have the problem context, textbook theorems, and hints. Ready to help." }] },
+    ...priorQA.flatMap((h) => [
+      { role: "user", parts: [{ text: h.q }] },
+      { role: "model", parts: [{ text: h.a }] },
+    ]),
+  ];
 
   const chat = model.startChat({
     systemInstruction: systemPrompt,
