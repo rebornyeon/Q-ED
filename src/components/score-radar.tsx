@@ -50,7 +50,7 @@ export function ScoreRadar({ score, size = 300 }: ScoreRadarProps) {
             borderRadius: "8px",
             fontSize: "12px",
           }}
-          formatter={(value) => [`${value}점`, ""]}
+          formatter={(value) => [`${value}pts`, ""]}
         />
       </RadarChart>
     </ResponsiveContainer>

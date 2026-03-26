@@ -58,10 +58,10 @@ export function SupplementaryUpload({ documentId, initialDocs = [], onDocsChange
     // Upload to Supabase Storage client-side first (avoids Vercel 4.5MB limit)
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setError("로그인이 필요합니다."); setUploading(null); return; }
+    if (!user) { setError("Please log in to upload."); setUploading(null); return; }
     const filePath = `${user.id}/supplementary/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, "_")}`;
     const { error: uploadError } = await supabase.storage.from("pdfs").upload(filePath, file, { contentType: "application/pdf" });
-    if (uploadError) { setError("Storage 업로드 실패"); setUploading(null); return; }
+    if (uploadError) { setError("Storage upload failed."); setUploading(null); return; }
 
     const res = await fetch("/api/supplementary", {
       method: "POST",
@@ -158,9 +158,9 @@ export function SupplementaryUpload({ documentId, initialDocs = [], onDocsChange
               <span>Analyzing <span className="font-medium">{uploading}</span>...</span>
             </div>
             <div className="flex items-center justify-center gap-3 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{uploadElapsed}초</span>
+              <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{uploadElapsed}s</span>
               <span>·</span>
-              <span>{uploadElapsed < uploadEstimate ? `~${uploadEstimate - uploadElapsed}초 남음` : "마무리 중..."}</span>
+              <span>{uploadElapsed < uploadEstimate ? `~${uploadEstimate - uploadElapsed}s left` : "Finishing up..."}</span>
             </div>
           </div>
         ) : (

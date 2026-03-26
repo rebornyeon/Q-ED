@@ -37,7 +37,7 @@ export default async function LandingPage({
       {/* Hero */}
       <section className="max-w-6xl mx-auto px-4 pt-24 pb-16 text-center">
         <Badge className="mb-6 text-xs px-3 py-1" variant="outline">
-          🔥 고효율 수학 학습 가속 엔진
+          🔥 High-Efficiency Math Learning Engine
         </Badge>
         <h1 className="text-5xl md:text-7xl font-black tracking-tighter mb-6 leading-tight">
           Q<span className="text-muted-foreground">:</span>ED
@@ -82,7 +82,7 @@ export default async function LandingPage({
               icon: <Target className="h-6 w-6" />,
               title: t("feature1Title"),
               desc: t("feature1Desc"),
-              badge: "🔥 자주 출제 · ⚠️ 함정 포인트 · 💯 고득점 핵심",
+              badge: "🔥 High Frequency · ⚠️ Trap Points · 💯 Key Concepts",
             },
             {
               icon: <Brain className="h-6 w-6" />,
@@ -118,14 +118,14 @@ export default async function LandingPage({
       <section className="border-t border-border/40 bg-muted/20 py-16">
         <div className="max-w-6xl mx-auto px-4">
           <h2 className="text-center text-2xl font-black tracking-tight mb-10">
-            4가지 Cue 타입
+            4 Cue Types
           </h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {[
-              { emoji: "🎯", name: "Kill Shot Cue", desc: "풀이를 종결짓는 핵심 열쇠" },
-              { emoji: "⚠️", name: "Trap Cue", desc: "오답을 유도하는 함정 방지" },
-              { emoji: "🔁", name: "Pattern Cue", desc: "반복되는 문제 구조의 도식화" },
-              { emoji: "🚀", name: "Speed Cue", desc: "풀이 시간을 단축하는 실전 팁" },
+              { emoji: "🎯", name: "Kill Shot Cue", desc: "The decisive key that closes the solution" },
+              { emoji: "⚠️", name: "Trap Cue", desc: "Prevent the traps that lead to wrong answers" },
+              { emoji: "🔁", name: "Pattern Cue", desc: "Diagramming recurring problem structures" },
+              { emoji: "🚀", name: "Speed Cue", desc: "Real-world tips to cut solve time" },
             ].map((cue, i) => (
               <div key={i} className="p-4 rounded-lg border border-border/60 bg-card text-center">
                 <div className="text-3xl mb-2">{cue.emoji}</div>
@@ -140,9 +140,9 @@ export default async function LandingPage({
       {/* CTA */}
       <section className="max-w-6xl mx-auto px-4 py-20 text-center">
         <h2 className="text-3xl font-black tracking-tight mb-4">
-          지금 바로 시작하세요
+          Start right now
         </h2>
-        <p className="text-muted-foreground mb-8">PDF 업로드 하나로 학습이 시작됩니다</p>
+        <p className="text-muted-foreground mb-8">Upload a PDF and your study session begins instantly</p>
         <Link href={`/${locale}/signup`}>
           <Button size="lg" className="gap-2 text-base px-10">
             <Zap className="h-4 w-4" />

@@ -92,12 +92,12 @@ export default async function DashboardPage({
             <h1 className="text-3xl font-black tracking-tight">
               {t("welcome")} {userName?.split("@")[0]} 👋
             </h1>
-            <p className="text-muted-foreground mt-1">오늘도 핵심만 공부합시다</p>
+            <p className="text-muted-foreground mt-1">Focus on what matters most</p>
           </div>
           <Link href={`/${locale}/upload`}>
             <Button className="gap-2">
               <Upload className="h-4 w-4" />
-              PDF 업로드
+              Upload PDF
             </Button>
           </Link>
         </div>
@@ -130,7 +130,7 @@ export default async function DashboardPage({
                 Score & Thinking Radar
               </CardTitle>
               <CardDescription>
-                {totalAttempts === 0 ? "학습을 시작하면 레이더가 채워집니다" : `${totalAttempts}개 문제 기반`}
+                {totalAttempts === 0 ? "Start studying to fill your radar" : `Based on ${totalAttempts} problems`}
               </CardDescription>
             </CardHeader>
             <CardContent>

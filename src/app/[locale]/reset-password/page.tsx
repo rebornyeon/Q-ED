@@ -24,8 +24,8 @@ export default function ResetPasswordPage() {
 
   async function handleReset(e: React.FormEvent) {
     e.preventDefault();
-    if (password !== confirm) { setError("비밀번호가 일치하지 않습니다"); return; }
-    if (password.length < 6) { setError("비밀번호는 최소 6자 이상이어야 합니다"); return; }
+    if (password !== confirm) { setError("Passwords do not match"); return; }
+    if (password.length < 6) { setError("Password must be at least 6 characters"); return; }
 
     setLoading(true);
     setError(null);
@@ -45,24 +45,24 @@ export default function ResetPasswordPage() {
         </div>
         <Card>
           <CardHeader className="space-y-1">
-            <CardTitle className="text-2xl font-bold">새 비밀번호 설정</CardTitle>
-            <CardDescription>새로운 비밀번호를 입력하세요</CardDescription>
+            <CardTitle className="text-2xl font-bold">Set New Password</CardTitle>
+            <CardDescription>Enter your new password below</CardDescription>
           </CardHeader>
           <CardContent>
             {done ? (
               <div className="text-center py-4 space-y-2">
                 <CheckCircle2 className="h-10 w-10 text-green-500 mx-auto" />
-                <p className="font-medium">비밀번호가 변경되었습니다</p>
-                <p className="text-xs text-muted-foreground">잠시 후 대시보드로 이동합니다...</p>
+                <p className="font-medium">Password updated</p>
+                <p className="text-xs text-muted-foreground">Redirecting to dashboard...</p>
               </div>
             ) : (
               <form onSubmit={handleReset} className="space-y-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="new-password">새 비밀번호</Label>
+                  <Label htmlFor="new-password">New Password</Label>
                   <Input
                     id="new-password"
                     type="password"
-                    placeholder="최소 6자 이상"
+                    placeholder="At least 6 characters"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
@@ -70,11 +70,11 @@ export default function ResetPasswordPage() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="confirm-password">비밀번호 확인</Label>
+                  <Label htmlFor="confirm-password">Confirm Password</Label>
                   <Input
                     id="confirm-password"
                     type="password"
-                    placeholder="비밀번호를 다시 입력하세요"
+                    placeholder="Re-enter your password"
                     value={confirm}
                     onChange={(e) => setConfirm(e.target.value)}
                     required
@@ -84,7 +84,7 @@ export default function ResetPasswordPage() {
                 {error && <p className="text-sm text-destructive">{error}</p>}
                 <Button type="submit" className="w-full" disabled={loading}>
                   {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  비밀번호 변경
+                  Update Password
                 </Button>
               </form>
             )}

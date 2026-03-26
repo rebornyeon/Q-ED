@@ -37,7 +37,7 @@ const InsightCard = memo(function InsightCard({ cue }: { cue: Cue }) {
         className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-violet-500/5 transition-colors"
       >
         <span className="text-sm font-semibold text-violet-600 dark:text-violet-400 flex-1">
-          이 정리가 왜 성립해?
+          Why does this theorem hold?
         </span>
         {open
           ? <ChevronUp className="h-4 w-4 text-violet-400 shrink-0" />
@@ -51,7 +51,7 @@ const InsightCard = memo(function InsightCard({ cue }: { cue: Cue }) {
             <>
               <div className="border-t border-violet-400/10" />
               <div>
-                <p className="text-[10px] font-semibold text-violet-500 uppercase tracking-wide mb-1">직관</p>
+                <p className="text-[10px] font-semibold text-violet-500 uppercase tracking-wide mb-1">Intuition</p>
                 <MathContent className="text-sm leading-relaxed text-muted-foreground">{cue.why_explanation}</MathContent>
               </div>
             </>
@@ -710,9 +710,9 @@ export default function StudySessionPage({
       <div className="min-h-screen bg-background">
         <Navbar />
         <main className="max-w-2xl mx-auto px-4 py-12 text-center">
-          <p className="text-muted-foreground">문제가 없습니다.</p>
+          <p className="text-muted-foreground">No problems found.</p>
           <Button onClick={() => router.push(`/${locale}/study`)} className="mt-4">
-            학습 목록으로
+            Back to study list
           </Button>
         </main>
       </div>

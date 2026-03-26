@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Q:ED — 고효율 수학 학습 가속 엔진",
+  title: "Q:ED — High-Efficiency Math Learning Engine",
   description: "Start with scores. End with mastery.",
 };
 

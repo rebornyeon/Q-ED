@@ -99,7 +99,7 @@ export interface AttemptLog {
   created_at: string;
 }
 
-export type SupplementaryDocType = "past_exam" | "prof_notes" | "study_guide" | "formula_sheet" | "other";
+export type SupplementaryDocType = "past_exam" | "prof_notes" | "study_guide" | "formula_sheet" | "textbook" | "other";
 
 export interface SupplementaryInsights {
   emphasized_topics: string[];

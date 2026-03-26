@@ -38,12 +38,12 @@ export default async function StudyListPage({
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-3xl font-black tracking-tight">{t("title")}</h1>
-            <p className="text-muted-foreground mt-1">진행 중인 학습 세션 목록</p>
+            <p className="text-muted-foreground mt-1">Your active study sessions</p>
           </div>
           <Link href={`/${locale}/upload`}>
             <Button className="gap-2">
               <Upload className="h-4 w-4" />
-              새 PDF 업로드
+              Upload PDF
             </Button>
           </Link>
         </div>
@@ -69,7 +69,7 @@ export default async function StudyListPage({
                       <CardTitle className="text-base">
                         <SessionNameEditor
                           sessionId={session.id}
-                          initialName={session.name ?? session.documents?.title ?? "세션"}
+                          initialName={session.name ?? session.documents?.title ?? "Session"}
                         />
                       </CardTitle>
                       <CardDescription className="flex items-center gap-1.5 mt-1">
@@ -82,7 +82,7 @@ export default async function StudyListPage({
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge variant={session.status === "completed" ? "secondary" : "default"}>
-                        {session.status === "completed" ? "완료" : "진행 중"}
+                        {session.status === "completed" ? "Completed" : "In Progress"}
                       </Badge>
                       <SessionDeleteButton sessionId={session.id} />
                     </div>
@@ -111,7 +111,7 @@ export default async function StudyListPage({
                   )}
                   <Link href={`/${locale}/study/${session.id}`}>
                     <Button size="sm" variant={session.status === "completed" ? "outline" : "default"}>
-                      {session.status === "completed" ? "복습하기" : td("startStudy")}
+                      {session.status === "completed" ? "Review" : td("startStudy")}
                     </Button>
                   </Link>
                 </CardContent>

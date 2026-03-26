@@ -51,9 +51,9 @@ export default function SignupPage() {
       <div className="min-h-screen flex items-center justify-center bg-background px-4">
         <Card className="w-full max-w-sm text-center p-8">
           <div className="text-4xl mb-4">📬</div>
-          <h2 className="text-xl font-bold mb-2">이메일을 확인하세요</h2>
+          <h2 className="text-xl font-bold mb-2">Check your email</h2>
           <p className="text-sm text-muted-foreground mb-6">
-            {email}로 인증 링크를 보냈습니다. 링크를 클릭하면 가입이 완료됩니다.
+            We sent a verification link to {email}. Click the link to complete your sign up.
           </p>
           <Link href={`/${locale}/login`}>
             <Button variant="outline" className="w-full">{tn("login")}</Button>

@@ -71,16 +71,16 @@ export default function LoginPage() {
           <Card>
             <CardHeader className="space-y-1">
               <CardTitle className="text-2xl font-bold">{t("forgotPassword")}</CardTitle>
-              <CardDescription>이메일로 비밀번호 재설정 링크를 보내드립니다</CardDescription>
+              <CardDescription>We'll send a password reset link to your email</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {resetSent ? (
                 <div className="text-center py-4 space-y-3">
                   <CheckCircle2 className="h-10 w-10 text-green-500 mx-auto" />
-                  <p className="text-sm font-medium">이메일을 확인하세요</p>
-                  <p className="text-xs text-muted-foreground">{email}로 재설정 링크를 보냈습니다</p>
+                  <p className="text-sm font-medium">Check your email</p>
+                  <p className="text-xs text-muted-foreground">We sent a reset link to {email}</p>
                   <Button variant="outline" className="w-full mt-2" onClick={() => { setView("login"); setResetSent(false); }}>
-                    로그인으로 돌아가기
+                    Back to login
                   </Button>
                 </div>
               ) : (
@@ -100,7 +100,7 @@ export default function LoginPage() {
                   {error && <p className="text-sm text-destructive">{error}</p>}
                   <Button type="submit" className="w-full" disabled={loading}>
                     {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    재설정 링크 전송
+                    Send reset link
                   </Button>
                   <Button type="button" variant="ghost" className="w-full" onClick={() => setView("login")}>
                     {tc("back")}

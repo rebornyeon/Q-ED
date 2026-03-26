@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     analysis = await analyzePDF(base64, selectedPageRanges);
   } catch (e) {
     console.error("analyzePDF error:", e);
-    return NextResponse.json({ error: `PDF 분석 실패: ${String(e)}` }, { status: 500 });
+    return NextResponse.json({ error: `PDF analysis failed: ${String(e)}` }, { status: 500 });
   }
 
   // Save document to DB (filePath already exists in storage)

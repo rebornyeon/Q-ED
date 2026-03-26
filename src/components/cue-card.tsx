@@ -69,7 +69,7 @@ export function CueCard({ cue, collapsed, onToggleCollapse }: CueCardProps) {
                 : "border-border/40 text-muted-foreground/60 hover:text-muted-foreground hover:border-border"
             }`}
           >
-            {isTheoremLevel ? "직관" : "왜?"}
+            {isTheoremLevel ? "Intuition" : "Why?"}
           </button>
         )}
       </div>
@@ -81,7 +81,7 @@ export function CueCard({ cue, collapsed, onToggleCollapse }: CueCardProps) {
           <Separator className="opacity-30" />
           <div className="pl-3 border-l-2 border-violet-400/30">
             <p className="text-[10px] font-semibold text-violet-500 uppercase tracking-wide mb-1 select-none">
-              {isTheoremLevel ? "이 정리가 성립하는 이유" : "왜 이 방법인가"}
+              {isTheoremLevel ? "Why this theorem holds" : "Why this approach"}
             </p>
             <MathContent className="text-xs text-muted-foreground leading-relaxed select-text cursor-text">
               {cue.why_explanation}
