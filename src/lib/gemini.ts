@@ -296,22 +296,37 @@ Rules:
         console.log(`Chunk ${chunkIndex + 1}: empty object, skipping`);
         return { concepts: [], problems: [] };
       }
-      // Unwrap if Gemini wrapped in an array: [{concepts, problems}]
-      if (Array.isArray(parsed) && parsed.length === 1 && parsed[0] && typeof parsed[0] === "object" && !Array.isArray(parsed[0])) {
-        parsed = parsed[0];
-      }
       // Empty array — no problems
       if (Array.isArray(parsed) && parsed.length === 0) {
         return { concepts: [], problems: [] };
       }
-      // If Gemini returned an array — could be problems, concepts, or mixed
+      // If Gemini returned an array — several possible shapes:
+      // A) [{concepts, problems}, {concepts, problems}, ...] — multiple chunk-like objects
+      // B) [{content, ...}, {content, ...}] — flat problem list
+      // C) single-item array wrapping the standard object
       if (Array.isArray(parsed)) {
-        // Try to extract any problem-like objects from the array
+        // A) Each item is a {concepts, problems} object — collect across all items
+        const hasChunkShape = parsed.some(
+          (item) => item && typeof item === "object" && ("problems" in item || "concepts" in item) && !("content" in item)
+        );
+        if (hasChunkShape) {
+          const allConcepts: GeminiAnalysisResult["concepts"] = [];
+          const allProblems: RawExtractedProblem[] = [];
+          for (const item of parsed) {
+            if (item && typeof item === "object") {
+              if (Array.isArray(item.concepts)) allConcepts.push(...item.concepts);
+              if (Array.isArray(item.problems)) allProblems.push(...normProblems(item.problems));
+            }
+          }
+          if (allProblems.length > 0 || allConcepts.length > 0) {
+            return { concepts: allConcepts, problems: allProblems };
+          }
+        }
+        // B) Flat array of problem objects
         const problems = normProblems(parsed);
         if (problems.length > 0) {
           return { concepts: [], problems };
         }
-        // Array had no valid problems (maybe array of concepts or strings)
         console.log(`Chunk ${chunkIndex + 1}: array with ${parsed.length} items but no valid problems, skipping`);
         return { concepts: [], problems: [] };
       }
@@ -561,17 +576,22 @@ Extract what this material emphasizes for exam preparation. Keep each list conci
     try { insights = parseGeminiJson(result.response.text()); break; } catch { /* retry */ }
   }
 
-  // 2. Extract all problems and knowledge blocks from full PDF (same chunking as main PDF)
+  // 2. Extract all problems and knowledge blocks from full PDF — parallel batches
   const chunks = await splitPDFIntoChunks(base64Data);
   const problems: RawProblem[] = [];
   const knowledgeBlocks: KnowledgeBlock[] = [];
-  for (let i = 0; i < chunks.length; i++) {
-    const [extracted, blocks] = await Promise.all([
-      extractProblemsFromChunk(chunks[i], i),
-      extractKnowledgeBlocksFromChunk(chunks[i]),
-    ]);
-    problems.push(...extracted.problems);
-    knowledgeBlocks.push(...blocks);
+  for (let i = 0; i < chunks.length; i += CHUNK_CONCURRENCY) {
+    const batch = chunks.slice(i, i + CHUNK_CONCURRENCY);
+    const batchResults = await Promise.all(
+      batch.map((chunk, j) => Promise.all([
+        extractProblemsFromChunk(chunk, i + j),
+        extractKnowledgeBlocksFromChunk(chunk),
+      ]))
+    );
+    for (const [extracted, blocks] of batchResults) {
+      problems.push(...extracted.problems);
+      knowledgeBlocks.push(...blocks);
+    }
   }
 
   return { insights, problems, knowledgeBlocks };
