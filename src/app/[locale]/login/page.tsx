@@ -71,7 +71,7 @@ export default function LoginPage() {
           <Card>
             <CardHeader className="space-y-1">
               <CardTitle className="text-2xl font-bold">{t("forgotPassword")}</CardTitle>
-              <CardDescription>We'll send a password reset link to your email</CardDescription>
+              <CardDescription>We&apos;ll send a password reset link to your email</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {resetSent ? (

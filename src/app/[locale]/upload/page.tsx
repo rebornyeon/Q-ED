@@ -210,9 +210,6 @@ export default function UploadPage() {
     };
   }
 
-  const addLectureFiles = makeAdder(setLectureEntries);
-  const addTextbookFiles = makeAdder(setTextbookEntries);
-  const addExamPrepFiles = makeAdder<ExamPrepEntry>(setExamPrepEntries, () => ({ docType: examPrepDocType }));
 
   function makeTitleUpdater<T extends FileEntry>(setter: React.Dispatch<React.SetStateAction<T[]>>) {
     return (id: string, title: string) => setter((prev) => prev.map((e) => e.id === id ? { ...e, title } : e));
@@ -372,7 +369,7 @@ export default function UploadPage() {
 
   // ── Concept helpers ───────────────────────────────────────────────
   function toggleConcept(name: string) {
-    setSelectedConcepts((prev) => { const n = new Set(prev); n.has(name) ? n.delete(name) : n.add(name); return n; });
+    setSelectedConcepts((prev) => { const n = new Set(prev); if (n.has(name)) { n.delete(name); } else { n.add(name); } return n; });
   }
   const { concepts, totalProblems } = mergeAnalyses(fileResults);
   function selectAll() { setSelectedConcepts(new Set(concepts.map((c) => c.name))); }
