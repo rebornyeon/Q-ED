@@ -285,7 +285,7 @@ Rules:
       const rawText = result.response.text();
       console.log(`Chunk ${chunkIndex + 1} attempt ${attempt + 1} raw (${rawText.length} chars):`, rawText.slice(0, 400));
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let parsed: any = parseGeminiJson(rawText);
+      const parsed = parseGeminiJson<any>(rawText);
 
       // null, undefined, empty, primitives — chunk has no extractable content
       if (parsed == null || typeof parsed === "string" || typeof parsed === "number" || typeof parsed === "boolean") {
@@ -624,26 +624,32 @@ Rules: problems must be fully self-contained — a student must be able to solve
 }
 
 // 청크 배열을 최대 concurrency개씩 병렬 처리
+// Problems and theorems are extracted in two separate passes to avoid hitting
+// Gemini rate limits with 2x concurrent calls per chunk.
 async function processChunksParallel(
   chunks: string[],
   concurrency: number,
   isProofBased = false
 ): Promise<{ concepts: GeminiAnalysisResult["concepts"]; problems: RawExtractedProblem[]; theorems: ExtractedTheorem[] }[]> {
-  const results: { concepts: GeminiAnalysisResult["concepts"]; problems: RawExtractedProblem[]; theorems: ExtractedTheorem[] }[] = [];
+  // Pass 1: extract problems (higher priority, more complex)
+  const extracted: { concepts: GeminiAnalysisResult["concepts"]; problems: RawExtractedProblem[] }[] = [];
   for (let i = 0; i < chunks.length; i += concurrency) {
     const batch = chunks.slice(i, i + concurrency);
     const batchResults = await Promise.all(
-      batch.map(async (chunk, j) => {
-        const [extracted, theorems] = await Promise.all([
-          extractProblemsFromChunk(chunk, i + j, isProofBased),
-          extractTheoremsFromChunk(chunk),
-        ]);
-        return { ...extracted, theorems };
-      })
+      batch.map((chunk, j) => extractProblemsFromChunk(chunk, i + j, isProofBased))
     );
-    results.push(...batchResults);
+    extracted.push(...batchResults);
   }
-  return results;
+
+  // Pass 2: extract theorems (lighter, run after problems to avoid rate limit spikes)
+  const theoremsList: ExtractedTheorem[][] = [];
+  for (let i = 0; i < chunks.length; i += concurrency) {
+    const batch = chunks.slice(i, i + concurrency);
+    const batchResults = await Promise.all(batch.map((chunk) => extractTheoremsFromChunk(chunk)));
+    theoremsList.push(...batchResults);
+  }
+
+  return extracted.map((e, i) => ({ ...e, theorems: theoremsList[i] ?? [] }));
 }
 
 // 메인: PDF 청크 분할 → 문제 추출 (Cue는 on-demand 생성으로 이동)
