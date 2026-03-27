@@ -834,7 +834,7 @@ export default function StudySessionPage({
             </div>
             <StudyTimer isRunning={!rating} onTick={setTimerSeconds} />
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             <Sheet open={listOpen} onOpenChange={setListOpen}>
               <SheetTrigger
                 render={<Button variant="ghost" size="sm" className="gap-1.5 text-xs h-8" />}
@@ -886,8 +886,8 @@ export default function StudySessionPage({
                                   {p.difficulty && <span className="text-xs text-amber-500">{"★".repeat(p.difficulty)}</span>}
                                   {generatedIds.has(p.id) && <span className="text-xs font-semibold text-sky-600 bg-sky-500/15 px-1.5 py-0.5 rounded-full">✦ AI</span>}
                                   {needsRetry && !generatedIds.has(p.id) && <span className="text-xs font-semibold text-amber-600 bg-amber-500/15 px-1.5 py-0.5 rounded-full">⟳</span>}
-                                  {p.is_exam_overlap && <span className="text-xs font-semibold text-red-600 bg-red-500/15 px-1.5 py-0.5 rounded-full">Exam</span>}
-                                  {p.exam_likelihood != null && p.exam_likelihood > 0 && (
+                                  {hasExamScoring && p.is_exam_overlap && <span className="text-xs font-semibold text-red-600 bg-red-500/15 px-1.5 py-0.5 rounded-full">Exam</span>}
+                                  {hasExamScoring && p.exam_likelihood != null && p.exam_likelihood > 0 && (
                                     <span className="text-[10px] text-red-500 tracking-tight" title={`Exam likelihood: ${p.exam_likelihood}/5`}>
                                       {"●".repeat(p.exam_likelihood)}{"○".repeat(5 - p.exam_likelihood)}
                                     </span>
@@ -1280,13 +1280,12 @@ export default function StudySessionPage({
                 </div>
               </SheetContent>
             </Sheet>
-            <Button variant="ghost" size="sm" className="gap-1.5 text-xs h-8" onClick={handlePrintSession} title="Print all problems">
+            <div className="w-px h-4 bg-border/60 mx-1" />
+            <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={handlePrintSession} title="Print all problems">
               <Printer className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Print</span>
             </Button>
-            <Button variant="ghost" size="sm" className="gap-1.5 text-xs h-8" onClick={() => router.push(`/${locale}/study`)}>
+            <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => router.push(`/${locale}/study`)} title="Study Sessions">
               <ChevronLeft className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Study Sessions</span>
             </Button>
           </div>
         </div>
@@ -1314,12 +1313,12 @@ export default function StudySessionPage({
             {currentNeedsRetry && (
               <Badge variant="outline" className="text-[11px] border-0 bg-amber-500/10 text-amber-600 font-semibold">⟳ Retry</Badge>
             )}
-            {currentProblem.exam_likelihood != null && currentProblem.exam_likelihood > 0 && (
+            {hasExamScoring && currentProblem.exam_likelihood != null && currentProblem.exam_likelihood > 0 && (
               <span className="text-[11px] text-red-500 tracking-tight" title={`Exam likelihood: ${currentProblem.exam_likelihood}/5`}>
                 {"●".repeat(currentProblem.exam_likelihood)}{"○".repeat(5 - currentProblem.exam_likelihood)}
               </span>
             )}
-            {currentProblem.is_exam_overlap && (
+            {hasExamScoring && currentProblem.is_exam_overlap && (
               <Badge variant="outline" className="text-[11px] border-0 bg-purple-500/10 text-purple-600 font-semibold">Past Exam</Badge>
             )}
           </div>
