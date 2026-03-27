@@ -236,9 +236,18 @@ function normProblems(raw: any[]): RawExtractedProblem[] {
 // 청크 하나에서 문제 목록 추출 (Cue 없이)
 async function extractProblemsFromChunk(
   base64Chunk: string,
-  chunkIndex: number
+  chunkIndex: number,
+  isProofBased = false
 ): Promise<{ concepts: GeminiAnalysisResult["concepts"]; problems: RawExtractedProblem[] }> {
   const model = getJsonModel();
+
+  const proofExtra = isProofBased ? `
+PROOF-BASED COURSE — additional rules:
+- Prioritize "Prove that...", "Show that...", "Let X. Prove Y", "Verify that...", "Disprove...", "Give a counterexample..." type problems.
+- For each proof problem, include ALL hypotheses and the exact statement to prove verbatim.
+- problem_type should reflect the proof technique when obvious: "Proof by induction", "Direct proof", "Proof by contradiction", "ε-δ proof", "Counterexample", "Existence proof", etc.
+- difficulty 4-5 for open-ended proofs, 2-3 for structured/guided proofs, 1-2 for verification.
+- is_key=true for theorems that appear on every exam; is_trap=true for common proof errors (e.g. assuming what you're proving).` : "";
 
   const prompt = `Math education expert. Analyze PDF section ${chunkIndex + 1}. Return JSON only, no cues.
 
@@ -258,7 +267,7 @@ Rules:
 - CRITICAL: Every problem MUST have a clear instruction telling the student what to do. Include the FULL instruction: "Prove that...", "Find...", "Show that...", "Determine...", "Let X be... Prove that Y", "Compute...", "Verify that...", etc.
 - For theorem/definition-based problems: DO NOT just copy the theorem. Write it as a task: "Prove that [theorem statement]" or "Show that [the following holds]: [statement]"
 - For computation problems: Always end with "Find [what to compute]" or "Compute [expression]"
-- A problem is INVALID if a student cannot tell what they need to do from the content alone.`;
+- A problem is INVALID if a student cannot tell what they need to do from the content alone.${proofExtra}`;
 
   for (let attempt = 0; attempt < 3; attempt++) {
     const result = await model.generateContent([
@@ -398,7 +407,8 @@ export async function generateCuesForProblem(
   problemContent: string,
   supplementaryContext?: SupplementaryInsights[],
   supplementaryProblems?: { content: string }[],
-  knowledgeBlocks?: KnowledgeBlock[]
+  knowledgeBlocks?: KnowledgeBlock[],
+  isProofBased = false
 ): Promise<GeneratedCue[]> {
   const model = getJsonModel();
 
@@ -418,7 +428,53 @@ ${supplementaryProblems && supplementaryProblems.length > 0
 ${knowledgeBlocksBlock}Use this context to make cues exam-targeted: highlight where this problem connects to the above patterns, formulas, and tips.\n`
     : knowledgeBlocksBlock;
 
-  const prompt = `You are a math education expert. Generate exactly 5 cues for this math problem.
+  const prompt = isProofBased
+    ? `You are a math education expert. Generate exactly 5 proof-focused cues for this proof problem.
+
+Problem: ${problemContent}
+${contextBlock}
+Return JSON array with exactly 5 elements — no other text:
+[
+  {
+    "cue_type": "understanding",
+    "cue_level": 0,
+    "content": "Proof Goal:\\n**Given:** [List all hypotheses/assumptions from the problem]\\n**Prove:** [Exact statement to prove in LaTeX]\\n**Key objects:** [Define all variables/sets/functions involved]",
+    "why_explanation": "Identifying exactly what must be proved (not assumed) prevents circular arguments."
+  },
+  {
+    "cue_type": "kill_shot",
+    "cue_level": 1,
+    "content": "**Proof Technique: [Direct / Contradiction / Contrapositive / Induction / ε-δ / Construction / Counterexample / Cases]**\\n[1-2 sentences: why this technique fits this problem. E.g., 'Contradiction works here because assuming ¬P leads to a clash with hypothesis X.']",
+    "why_explanation": "[The mathematical reason this technique is appropriate — what property of the problem makes it work]"
+  },
+  {
+    "cue_type": "pattern",
+    "cue_level": 2,
+    "content": "Proof Outline:\\n1. [First structural move — e.g., 'Assume for contradiction that...', 'Let n = base case...', 'Suppose ε > 0 is given...']\\n2. [Key intermediate goal — the critical lemma or sub-claim]\\n3. [How to close — connect back to the goal]",
+    "why_explanation": "[Why this structure works — the logical chain in one sentence]"
+  },
+  {
+    "cue_type": "trap",
+    "cue_level": 3,
+    "content": "Key Step: [The single most critical definition, lemma, or manipulation needed]\\n$$[LaTeX for the key formula or definition]$$\\nCommon mistake: [What students typically do wrong here]",
+    "why_explanation": "[Why invoking this definition/lemma is the turning point of the proof]"
+  },
+  {
+    "cue_type": "kill_shot",
+    "cue_level": 4,
+    "content": "**Full Proof**\\n\\n[Write the complete rigorous proof with every step justified. Use numbered steps or 'Proof:' format. Show all algebraic manipulations, quantifier handling, and logical connections. End with ∎ or QED.]",
+    "why_explanation": "[The core insight that makes the whole proof work — 1 sentence]"
+  }
+]
+
+STRICT RULES:
+- Level 1 must name the proof technique explicitly and justify why it fits
+- Level 2 outline: 3 concrete steps, not vague — each step is an actionable move
+- Level 3 must include a LaTeX block for the key definition/lemma + name a specific common mistake
+- Level 4: FULL rigorous proof — every quantifier, every step justified, no "..." placeholders
+- why_explanation for level 1: the mathematical reason the technique works, not just "it's the right choice"
+- All text in English. Use actual newline characters (\\n) in JSON strings for line breaks.`
+    : `You are a math education expert. Generate exactly 5 cues for this math problem.
 
 Problem: ${problemContent}
 ${contextBlock}
@@ -550,7 +606,8 @@ Rules: problems must be fully self-contained — a student must be able to solve
 // 청크 배열을 최대 concurrency개씩 병렬 처리
 async function processChunksParallel(
   chunks: string[],
-  concurrency: number
+  concurrency: number,
+  isProofBased = false
 ): Promise<{ concepts: GeminiAnalysisResult["concepts"]; problems: RawExtractedProblem[]; theorems: ExtractedTheorem[] }[]> {
   const results: { concepts: GeminiAnalysisResult["concepts"]; problems: RawExtractedProblem[]; theorems: ExtractedTheorem[] }[] = [];
   for (let i = 0; i < chunks.length; i += concurrency) {
@@ -558,7 +615,7 @@ async function processChunksParallel(
     const batchResults = await Promise.all(
       batch.map(async (chunk, j) => {
         const [extracted, theorems] = await Promise.all([
-          extractProblemsFromChunk(chunk, i + j),
+          extractProblemsFromChunk(chunk, i + j, isProofBased),
           extractTheoremsFromChunk(chunk),
         ]);
         return { ...extracted, theorems };
@@ -572,7 +629,8 @@ async function processChunksParallel(
 // 메인: PDF 청크 분할 → 문제 추출 (Cue는 on-demand 생성으로 이동)
 export async function analyzePDF(
   base64Data: string,
-  selectedPageRanges?: { start: number; end: number }[]
+  selectedPageRanges?: { start: number; end: number }[],
+  isProofBased = false
 ): Promise<GeminiAnalysisResult> {
   // 1단계: PDF를 청크로 분할 (선택된 페이지 범위만, 또는 전체)
   const chunks = selectedPageRanges && selectedPageRanges.length > 0
@@ -580,7 +638,7 @@ export async function analyzePDF(
     : await splitPDFIntoChunks(base64Data);
 
   // 2단계: 청크 병렬 처리 (최대 CHUNK_CONCURRENCY개 동시)
-  const chunkResults = await processChunksParallel(chunks, CHUNK_CONCURRENCY);
+  const chunkResults = await processChunksParallel(chunks, CHUNK_CONCURRENCY, isProofBased);
   const allConcepts: GeminiAnalysisResult["concepts"] = [];
   const allRawProblems: RawExtractedProblem[] = [];
   const allTheorems: ExtractedTheorem[] = [];
@@ -636,6 +694,7 @@ export async function analyzePDF(
     })),
     problems,
     theorems,
+    is_proof_based: isProofBased,
   };
 }
 

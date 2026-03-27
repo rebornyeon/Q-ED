@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { generateCuesForProblem } from "@/lib/gemini";
-import type { KnowledgeBlock, SupplementaryInsights } from "@/types";
+import type { KnowledgeBlock, SupplementaryInsights, DocumentAnalysis } from "@/types";
 
 export async function POST(request: NextRequest) {
   try {
@@ -41,6 +41,19 @@ export async function POST(request: NextRequest) {
     .eq("id", problemId)
     .single();
 
+  // Check if this document is proof-based
+  let isProofBased = false;
+  if (problem?.document_id) {
+    const { data: doc } = await supabase
+      .from("documents")
+      .select("analysis")
+      .eq("id", problem.document_id)
+      .single();
+    if (doc?.analysis) {
+      isProofBased = !!(doc.analysis as DocumentAnalysis).is_proof_based;
+    }
+  }
+
   let supplementaryContext: SupplementaryInsights[] | undefined;
   let supplementaryProblems: { content: string }[] | undefined;
   let knowledgeBlocks: KnowledgeBlock[] | undefined;
@@ -68,7 +81,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Generate new cues with Gemini (enriched with supplementary context)
-  const generatedCues = await generateCuesForProblem(problemContent, supplementaryContext, supplementaryProblems, knowledgeBlocks);
+  const generatedCues = await generateCuesForProblem(problemContent, supplementaryContext, supplementaryProblems, knowledgeBlocks, isProofBased);
 
   if (generatedCues.length === 0) {
     return NextResponse.json({ cues: [] });

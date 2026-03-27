@@ -24,6 +24,7 @@ export interface DocumentAnalysis {
   problem_types: ProblemType[];
   total_problems: number;
   difficulty_distribution: Record<string, number>;
+  is_proof_based?: boolean;
 }
 
 export interface Concept {
@@ -154,6 +155,7 @@ export interface GeminiAnalysisResult {
   problem_types: ProblemType[];
   summary: string;
   theorems?: ExtractedTheorem[];
+  is_proof_based?: boolean;
 }
 
 export interface GeneratedProblem {

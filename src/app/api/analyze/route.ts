@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { filePath, title, selectedPageRanges } = await request.json();
+  const { filePath, title, selectedPageRanges, isProofBased } = await request.json();
 
   if (!filePath || !title) {
     return NextResponse.json({ error: "filePath and title are required" }, { status: 400 });
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
   const base64 = buffer.toString("base64");
   let analysis: GeminiAnalysisResult;
   try {
-    analysis = await analyzePDF(base64, selectedPageRanges);
+    analysis = await analyzePDF(base64, selectedPageRanges, isProofBased ?? false);
   } catch (e) {
     console.error("analyzePDF error:", e);
     return NextResponse.json({ error: `PDF analysis failed: ${String(e)}` }, { status: 500 });

@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Loader2, Upload, FileText, CheckCircle2, AlertCircle,
   Flame, AlertTriangle, Trophy, Filter, Star, X, Plus, Clock, BookOpen, GraduationCap, ClipboardList,
+  Sparkles, ArrowRight, ChevronDown,
 } from "lucide-react";
 
 function estimatePages(bytes: number) { return Math.max(1, Math.round(bytes / 75000)); }
@@ -181,6 +182,9 @@ export default function UploadPage() {
 
   const [selectedConcepts, setSelectedConcepts] = useState<Set<string>>(new Set());
   const [includeSupplementary, setIncludeSupplementary] = useState(false);
+  const [isProofBased, setIsProofBased] = useState(false);
+  const [textbookOpen, setTextbookOpen] = useState(false);
+  const [examPrepOpen, setExamPrepOpen] = useState(false);
   const [startingStudy, setStartingStudy] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
 
@@ -299,7 +303,7 @@ export default function UploadPage() {
       try {
         const res = await fetch("/api/analyze", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ filePath, title: entry.title.trim() || entry.file.name.replace(/\.pdf$/i, ""), selectedPageRanges }),
+          body: JSON.stringify({ filePath, title: entry.title.trim() || entry.file.name.replace(/\.pdf$/i, ""), selectedPageRanges, isProofBased }),
         });
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
@@ -410,6 +414,39 @@ export default function UploadPage() {
           <p className="text-muted-foreground mt-1">{t("subtitle")}</p>
         </div>
 
+        {/* ── HOW IT WORKS ── */}
+        <div className="mb-8 rounded-xl border border-border/60 bg-muted/30 p-5">
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-4">How it works</p>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+            {/* Step 1 */}
+            <div className="flex-1 flex items-start gap-3">
+              <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-xs">1</div>
+              <div>
+                <p className="text-sm font-semibold flex items-center gap-1.5"><Upload className="h-3.5 w-3.5 text-primary" /> Upload PDFs</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Drop lecture notes, homework, textbook chapters, or past exams. Add titles and pick a type for each file.</p>
+              </div>
+            </div>
+            <ArrowRight className="hidden sm:block h-4 w-4 shrink-0 text-muted-foreground/40" />
+            {/* Step 2 */}
+            <div className="flex-1 flex items-start gap-3">
+              <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-500/10 text-amber-600 font-bold text-xs">2</div>
+              <div>
+                <p className="text-sm font-semibold flex items-center gap-1.5"><Filter className="h-3.5 w-3.5 text-amber-500" /> Select chapters</p>
+                <p className="text-xs text-muted-foreground mt-0.5">For large PDFs, the table of contents is auto-detected. Pick only the chapters relevant to your exam — skip the rest.</p>
+              </div>
+            </div>
+            <ArrowRight className="hidden sm:block h-4 w-4 shrink-0 text-muted-foreground/40" />
+            {/* Step 3 */}
+            <div className="flex-1 flex items-start gap-3">
+              <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 font-bold text-xs">3</div>
+              <div>
+                <p className="text-sm font-semibold flex items-center gap-1.5"><Sparkles className="h-3.5 w-3.5 text-emerald-500" /> AI analysis</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Gemini scans every page and extracts problems, concepts, and theorems — ranked by exam likelihood. Takes ~1–3 min.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* ── IDLE / ERROR ── */}
         {(step === "idle" || step === "error") && (
           <div className="space-y-4">
@@ -422,8 +459,19 @@ export default function UploadPage() {
                   <Badge className="ml-auto text-xs">Required</Badge>
                 </CardTitle>
                 <CardDescription className="text-xs">
-                  Problems will be extracted for drilling — this is your primary study material.
+                  Problems are extracted from this for active drilling. Upload lecture slides, handouts, or homework sets — anything with problems you need to solve for the exam.
                 </CardDescription>
+                <label className="flex items-center gap-2 mt-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={isProofBased}
+                    onChange={(e) => setIsProofBased(e.target.checked)}
+                    className="h-4 w-4 rounded border-border accent-primary"
+                  />
+                  <span className="text-xs text-muted-foreground">
+                    Proof-based course — optimizes cues for proof structure (Proof Goal → Technique → Outline → Key Step → Full Proof)
+                  </span>
+                </label>
               </CardHeader>
               <CardContent>
                 <FileDropSection
@@ -439,41 +487,62 @@ export default function UploadPage() {
 
             {/* Section 2: Textbook */}
             <Card>
-              <CardHeader className="pb-3">
+              <CardHeader className="pb-3 cursor-pointer select-none" onClick={() => setTextbookOpen((o) => !o)}>
                 <CardTitle className="text-base flex items-center gap-2">
                   <BookOpen className="h-4 w-4 text-muted-foreground" />
                   Textbook
+                  {textbookEntries.length > 0 && (
+                    <Badge variant="secondary" className="text-xs">{textbookEntries.length} file{textbookEntries.length > 1 ? "s" : ""}</Badge>
+                  )}
                   <Badge variant="outline" className="ml-auto text-xs">Optional</Badge>
+                  <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${textbookOpen ? "rotate-180" : ""}`} />
                 </CardTitle>
-                <CardDescription className="text-xs">
-                  Theorems & definitions extracted as reference. Problems available on request.
-                </CardDescription>
+                {!textbookOpen && (
+                  <CardDescription className="text-xs">
+                    Theorems &amp; definitions extracted as reference. Pull problems into your session on demand.
+                  </CardDescription>
+                )}
               </CardHeader>
-              <CardContent>
-                <FileDropSection
-                  sectionRef={textbookRef}
-                  entries={textbookEntries}
-                  onAdd={makeAdder(setTextbookEntries)}
-                  onRemove={(id) => setTextbookEntries((p) => p.filter((e) => e.id !== id))}
-                  onTitleChange={makeTitleUpdater(setTextbookEntries)}
-                  placeholder="Drop textbook PDF here"
-                />
-              </CardContent>
+              {textbookOpen && (
+                <CardContent className="space-y-3 pt-0">
+                  <p className="text-xs text-muted-foreground">
+                    Theorems, definitions, and worked examples are extracted as a reference base. During study, you can pull textbook problems into your session on demand. Upload the relevant chapters — the full book isn&apos;t needed.
+                  </p>
+                  <FileDropSection
+                    sectionRef={textbookRef}
+                    entries={textbookEntries}
+                    onAdd={makeAdder(setTextbookEntries)}
+                    onRemove={(id) => setTextbookEntries((p) => p.filter((e) => e.id !== id))}
+                    onTitleChange={makeTitleUpdater(setTextbookEntries)}
+                    placeholder="Drop textbook PDF here"
+                  />
+                </CardContent>
+              )}
             </Card>
 
             {/* Section 3: Exam Prep */}
             <Card>
-              <CardHeader className="pb-3">
+              <CardHeader className="pb-3 cursor-pointer select-none" onClick={() => setExamPrepOpen((o) => !o)}>
                 <CardTitle className="text-base flex items-center gap-2">
                   <ClipboardList className="h-4 w-4 text-muted-foreground" />
                   Exam Prep
+                  {examPrepEntries.length > 0 && (
+                    <Badge variant="secondary" className="text-xs">{examPrepEntries.length} file{examPrepEntries.length > 1 ? "s" : ""}</Badge>
+                  )}
                   <Badge variant="outline" className="ml-auto text-xs">Optional</Badge>
+                  <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${examPrepOpen ? "rotate-180" : ""}`} />
                 </CardTitle>
-                <CardDescription className="text-xs">
-                  Past exams, professor notes, study guides — used to calibrate hints and concept emphasis.
-                </CardDescription>
+                {!examPrepOpen && (
+                  <CardDescription className="text-xs">
+                    Past exams, prof notes, study guides — calibrates which concepts get emphasized in cues.
+                  </CardDescription>
+                )}
               </CardHeader>
-              <CardContent className="space-y-3">
+              {examPrepOpen && (
+              <CardContent className="space-y-3 pt-0">
+                <p className="text-xs text-muted-foreground">
+                  Used to calibrate which concepts are emphasized and how cues are weighted. Past exams show what the professor actually tests; prof notes and study guides reveal what to prioritize. The more context, the sharper the hints.
+                </p>
                 {/* Type picker */}
                 <div className="flex flex-wrap gap-1.5">
                   {EXAM_PREP_TYPES.map((t) => (
@@ -496,6 +565,7 @@ export default function UploadPage() {
                   placeholder={`Drop PDF here as ${EXAM_PREP_TYPES.find((t) => t.value === examPrepDocType)?.label}`}
                 />
               </CardContent>
+              )}
             </Card>
 
             {error && (
